@@ -4,14 +4,19 @@ import socket, threading
 import json
 
 class ITReportForm(tk.Tk):
-    def __init__(self, host, port, mode):
+    def __init__(self, local_host, port, mode, client_socket=None):
         super().__init__()
-        self.host = host
+        self.host = local_host
         self.port = port
         self.mode = mode
+        self.client_socket = client_socket
 
         self.title("IT Report Form")
-        self.geometry(self._center_window(400, 500))
+        if self.mode == "client":
+            self.geometry(self._center_window(400, 400))
+        else:
+            self.geometry(self._center_window(400, 250))
+
 
         self.configure_gui(self, 3, 1)
 
@@ -36,7 +41,7 @@ class ITReportForm(tk.Tk):
         
         if self.mode == "server":
             self.user_widget()
-            self.start_server_thread()
+            # self.start_server_thread()
             submit_btn = self.widget(parent=btn_frm, name="button", text="Submit", row=0, col=1, command=lambda: self.handle_client_request(self.client_socket))
 
         else:
@@ -45,7 +50,6 @@ class ITReportForm(tk.Tk):
             send_btn = self.widget(parent=btn_frm, name="button", text="Request", row=0, col=0, command=self.start_client_thread)
             submit_btn = self.widget(parent=btn_frm, name="button", text="Submit", row=0, col=1)
         
-
 
     def widget(self, **kwargs):
         widget = None
@@ -97,7 +101,7 @@ class ITReportForm(tk.Tk):
         it_lbl_frm = self.widget(parent=self, name="lframe", text="IT Information", row=1, col=0, sticky="n")
 
         ip_lbl = self.widget(parent=it_lbl_frm, name="label", text="IP address:", font=self.font, row=0, col=0, sticky="e")
-        self.ip_address = self.widget(parent=it_lbl_frm, name="combo", font=self.font, row=0, col=1, sticky="w")
+        self.ip_address_widget = self.widget(parent=it_lbl_frm, name="combo", font=self.font, row=0, col=1, sticky="w")
 
         it_lbl = self.widget(parent=it_lbl_frm, name="label", text="IT Personel:", font=self.font, row=1, col=0, sticky="e")
         self.it = self.widget(parent=it_lbl_frm, name="combo", font=self.font, row=1, col=1, sticky="w")
@@ -112,33 +116,18 @@ class ITReportForm(tk.Tk):
         threading.Thread(target=self.connect_server, daemon=True).start()
 
 
-    def start_server_thread(self):
-        threading.Thread(target=self.server_start, daemon=True).start()
 
 
     def connect_server(self):
         self.data = None
+        remote_host = self.ip_address_widget.get()
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
-                client_socket.connect((self.host, self.port))
+                client_socket.connect((remote_host, self.port))
                 print("Connection Accepted by server")
                 data = client_socket.recv(1024).decode("utf-8")
                 self.data = json.loads(data)
                 self.update_user_data(mode=self.mode)
-        except socket.error as e:
-            print(f"Connection error: {e}")
-
-    def server_start(self):
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
-                server_socket.bind((self.host, self.port))
-                server_socket.listen()
-
-                while True:
-                    self.client_socket, _ = server_socket.accept()
-                    print("Client connected")
-                    threading.Thread(target=self.server_start(), daemon=True)
-
         except socket.error as e:
             print(f"Connection error: {e}")
 
@@ -147,6 +136,7 @@ class ITReportForm(tk.Tk):
             data = self.update_user_data(self.mode)
             user_data = json.dumps(data).encode("utf-8")
             client_socket.sendall(user_data)
+            self.destroy()
 
     def update_user_data(self, mode):
         if mode == "server":
@@ -171,25 +161,44 @@ class ITReportForm(tk.Tk):
                 self.time.insert(tk.END, self.data.get("time"))
 
 
+def server_start():
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
+            server_socket.bind((host, port))
+            server_socket.listen()
+            print("server started and listening")
 
 
-    # def data_update(self):
-        
+            while True:
+                client_socket, _ = server_socket.accept()
+                display_gui(client_socket)
+                print("Client connected")
+                # threading.Thread(target=server_start(), daemon=True)
 
-    # def widget_label(self, parent, text, font=None):
-    #     return ttk.Label(parent, text=text, font=font)
-    
-    # def widget_position(self, widg, row, col):
-    #     widg.grid(row=row, column=col, padx=5, pady=5, sticky=sticky)
+    except socket.error as e:
+        print(f"Connection error: {e}")
+
+def display_gui(client_socket):
+    with client_socket:
+        app = ITReportForm(host, port, mode, client_socket)
+        app.mainloop()
+
+
+def start_server_thread():
+    threading.Thread(target=server_start, daemon=True).start()
 
 
 if __name__ == "__main__":
-    host = '192.168.0.250'
+    host = socket.gethostbyname(socket.gethostname())
     port = 12345
     while True:
         mode = input("Enter mode(client/server): ").strip().lower()
         if mode == "client" or mode == "server":
+            if mode == "client":
+                app = ITReportForm(host, port, mode)
+                app.mainloop()
+            else:
+                server_start()
             break
         print("Please Enter Correct Mode")
-    app = ITReportForm(host, port, mode)
-    app.mainloop()
+    
