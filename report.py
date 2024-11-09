@@ -2,6 +2,8 @@ import tkinter as tk
 from tkinter import ttk
 import socket, threading
 import json
+from openpyxl import load_workbook, Workbook
+import os
 
 class ITReportForm(tk.Tk):
     def __init__(self, local_host, port, mode, client_socket=None):
@@ -12,6 +14,7 @@ class ITReportForm(tk.Tk):
         self.client_socket = client_socket
 
         self.title("IT Report Form")
+        self.iconbitmap("sign.ico")
         if self.mode == "client":
             self.geometry(self._center_window(400, 400))
         else:
@@ -48,7 +51,7 @@ class ITReportForm(tk.Tk):
             self.user_widget()
             self.it_widget()
             send_btn = self.widget(parent=btn_frm, name="button", text="Request", row=0, col=0, command=self.start_client_thread)
-            submit_btn = self.widget(parent=btn_frm, name="button", text="Submit", row=0, col=1)
+            submit_btn = self.widget(parent=btn_frm, name="button", text="Submit", row=0, col=1, command=self.on_data_submit)
         
 
     def widget(self, **kwargs):
@@ -64,9 +67,10 @@ class ITReportForm(tk.Tk):
         pady = kwargs.get("pady")
         sticky = kwargs.get("sticky")
         colspan = kwargs.get("colspan")
+        vals = kwargs.get("values")
 
         if widget_name == "combo":
-            widget = ttk.Combobox(parent, font=font, width=30)
+            widget = ttk.Combobox(parent, font=font, width=30, values=vals)
         if widget_name == "entry":
             widget = ttk.Entry(parent, font=font, width=32)
         if widget_name == "frame":
@@ -81,6 +85,18 @@ class ITReportForm(tk.Tk):
         return widget
 
     def user_widget(self):
+        # workbook = load_workbook("output.xlsx")
+        # sheet = workbook["Sheet1"]
+        # data_opt = {
+        #     "usernames": [cell.value for cell in sheet["C"]],
+        #     "names": [cell.value for cell in sheet["D"]]        
+        # }
+        # usernames = []
+        # names = []
+        # if self.mode == "client":
+        # data_opt = json.loads(self.client_socket.recv(1024).decode("utf-8"))
+            # usernames = data_opt.get("usernames", [])
+            # names = data_opt.get("names", [])
         user_lbl_frm = self.widget(parent=self, name="lframe", text="User Details", row=0, col=0, sticky="s")
         self.configure_gui(user_lbl_frm, 1, 1)
         username_lbl = self.widget(parent=user_lbl_frm, name="label", text="Username:", font=self.font, row=0, col=0, sticky="e")
@@ -116,15 +132,51 @@ class ITReportForm(tk.Tk):
         threading.Thread(target=self.connect_server, daemon=True).start()
 
 
+    def on_data_submit(self):
+        file_path = "output.xlsx"
+
+        if os.path.exist(file_path):
+
+            workbook = load_workbook("output.xlsx")
+            sheet = workbook["Sheet1"]
+        else:
+            workbook = Workbook()
+            workbook.active.title = "Sheet1"
+            sheet = workbook["Sheet1"]
+            
+        it_name = self.it.get().upper()
+        username = self.username.get()
+        name = self.name.get().upper()
+        des = self.des.get()
+        ip_address = self.ip_address_widget.get()
+        time = self.time.get()
+        duration = self.duration.get()
+        issue = self.issue.get().capitalize()
+
+        data = [it_name, username, name, des, ip_address, time, duration, issue]
+
+
+        next_row = sheet.max_row + 1
+        for col, value in enumerate(data, start=2):
+            sheet.cell(row=next_row, column=col, value=value)
+        workbook.save("output.xlsx")
 
 
     def connect_server(self):
         self.data = None
+        workbook = load_workbook("output.xlsx")
+        sheet = workbook["Sheet1"]
+        data_opt = {
+            "usernames": [cell.value for cell in sheet["C"]],
+            "names": [cell.value for cell in sheet["D"]]        
+        }
+        
         remote_host = self.ip_address_widget.get()
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
                 client_socket.connect((remote_host, self.port))
                 print("Connection Accepted by server")
+                # client_socket.sendall(json.dumps(data_opt).encode("utf-8"))
                 data = client_socket.recv(1024).decode("utf-8")
                 self.data = json.loads(data)
                 self.update_user_data(mode=self.mode)
