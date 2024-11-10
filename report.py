@@ -135,7 +135,7 @@ class ITReportForm(tk.Tk):
     def on_data_submit(self):
         file_path = "output.xlsx"
 
-        if os.path.exist(file_path):
+        if os.path.exists(file_path):
 
             workbook = load_workbook("output.xlsx")
             sheet = workbook["Sheet1"]
@@ -160,6 +160,7 @@ class ITReportForm(tk.Tk):
         for col, value in enumerate(data, start=2):
             sheet.cell(row=next_row, column=col, value=value)
         workbook.save("output.xlsx")
+        self.destroy()
 
 
     def connect_server(self):
