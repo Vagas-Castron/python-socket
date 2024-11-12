@@ -3,7 +3,7 @@ from tkinter import ttk
 import socket, threading
 import json
 from openpyxl import load_workbook, Workbook
-import os
+import os, sys
 
 class ITReportForm(tk.Tk):
     def __init__(self, local_host, port, mode, client_socket=None):
@@ -12,9 +12,10 @@ class ITReportForm(tk.Tk):
         self.port = port
         self.mode = mode
         self.client_socket = client_socket
-
+        base_path = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+        icon_path = os.path.join(base_path, "sign.ico")
         self.title("IT Report Form")
-        self.iconbitmap("sign.ico")
+        self.iconbitmap(icon_path)
         if self.mode == "client":
             self.geometry(self._center_window(400, 400))
         else:
