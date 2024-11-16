@@ -50,11 +50,12 @@ class ITReportForm(tk.Tk):
             submit_btn = self.widget(parent=btn_frm, name="button", text="Submit", row=0, col=1, command=self.start_client_thread)
 
         else:
-            # self.withdraw()
+            self.withdraw()
             self.client_widgets()
             self.server_widgets()
-            # self.start_server_thread()
-            self.receive_data(self.client_socket)
+            self.start_server_thread()
+            # self.server_start()
+            # self.receive_data(self.client_socket)
             # send_btn = self.widget(parent=btn_frm, name="button", text="Request", row=0, col=0, command=self.start_client_thread)
             submit_btn = self.widget(parent=btn_frm, name="button", text="Submit", row=0, col=1, command=self.on_data_submit)
         
@@ -196,18 +197,19 @@ class ITReportForm(tk.Tk):
             print(f"Error: {e}")
     
     # A method/ function for receiving data from client and also calls update function fo update data to the GUI
-    def receive_data(self, client_socket):
+    def receive_data(self):
         try:
-            data = client_socket.recv(1024).decode("utf-8")
+            data = self.client_socket.recv(1024).decode("utf-8")
             if not data:
                 raise  ValueError("No data received from client")
             data = json.loads(data)
-            data["client_ip_addr"] = client_socket.getpeername()[0]
+            data["client_ip_addr"] = self.client_socket.getpeername()[0]
             self.data = data
             self.update_user_data(self.mode)
+            self.deiconify
         except Exception as e:
             print(f"Connection Error: {e}")
-            client_socket.close()
+            self.client_socket.close()
             self.destroy()
 
     def on_key_release(self, event):
@@ -296,36 +298,35 @@ class ITReportForm(tk.Tk):
                 self.ip_address_widget.insert(tk.END, self.data.get("client_ip_addr"))
 
 
+
+    def server_start(self):
+        try:
+            server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            server_socket.bind((self.host, self.port))
+            self.server_socket = server_socket
+            server_socket.listen()
+            print("server started and listening")
+            self.server_listening()
+
+        except socket.error as e:
+            print(f"Connection error: {e}")
+
+    def server_listening(self):
+        while True:
+                client_socket, addr = self.server_socket.accept()
+                self.client_socket = client_socket
+                print("Client connected")
+                self.receive_data()
+                threading.Thread(target=self.server_listening, daemon=True).start()
+
+
+    def start_server_thread(self):
+        threading.Thread(target=self.server_start, daemon=True).start()
+
 def display_gui(host, port, mode, client_socket):
     # with client_socket:
     app = ITReportForm(host, port, mode, client_socket)
     app.mainloop()
-
-
-def server_start(addr, port, mode):
-    try:
-        server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server_socket.bind((host, port))
-        server_socket = server_socket
-        server_socket.listen()
-        print("server started and listening")
-        server_listening(addr, port, mode,server_socket)
-
-    except socket.error as e:
-        print(f"Connection error: {e}")
-
-def server_listening(addr, port, mode, server_socket):
-    while True:
-            client_socket, addr = server_socket.accept()
-            client_socket = client_socket
-            print("Client connected")
-            display_gui(addr, port, mode, client_socket)
-            start_server_thread(addr, port, mode, server_socket)
-
-
-def start_server_thread(addr, port, mode, server_socket):
-    threading.Thread(target=server_listening, args=(addr, port, mode, server_socket,), daemon=True).start()
-
 
 
 
@@ -341,7 +342,8 @@ if __name__ == "__main__":
                 app = ITReportForm(host, port, mode)
                 app.mainloop()
             else:
-                server_start(host, port, mode)
+                app = ITReportForm(host, port, mode)
+                app.mainloop()
             break
         print("Please Enter Correct Mode")
     
