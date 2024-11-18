@@ -15,7 +15,7 @@ Source: "C:\Users\Vagas\Documents\it report form\config.json"; DestDir: "{app}";
 Source: "C:\Users\Vagas\Documents\it report form\sign.ico"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{desktop}\ReportApp"; Filename: "{app}\ReportApp.exe"; WorkingDir: "{app}"; IconFilename: "{app}\ReportApp.ico"; IconIndex: 0
+Name: "{commondesktop}\ReportApp"; Filename: "{app}\report.exe"; WorkingDir: "{app}"; IconFilename: "{app}\sign.ico"; IconIndex: 0
 
 [Code]
 var
