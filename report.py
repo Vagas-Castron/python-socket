@@ -6,6 +6,9 @@ import json
 from openpyxl import load_workbook, Workbook
 import os, sys, re
 import queue
+import time
+
+
 
 class ITReportForm(tk.Tk):
     def __init__(self, mode, port=None, client_socket=None):
@@ -111,24 +114,40 @@ class ITReportForm(tk.Tk):
         user_lbl_frm = self.widget(parent=self, name="lframe", text="User Details", row=0, col=0, sticky="s")
         self.configure_gui(user_lbl_frm, 1, 1)
 
-
+        usernames = self.user_options().get("usernames")
         username_lbl = self.widget(parent=user_lbl_frm, name="label", text="Username:", font=self.font, row=0, col=0, sticky="e")
-        self.username = self.widget(parent=user_lbl_frm, name="combo", font=self.font, row=0, col=1, sticky="w")
+        self.username = self.widget(parent=user_lbl_frm, name="combo", font=self.font, row=0, col=1, sticky="w", values=usernames)
+        usernames = self.user_options().get("usernames")
+        self.username.bind("<KeyRelease>", lambda event: self.combobox_filter(event, self.username, usernames))
 
+        names = self.user_options().get("names")
         name_lbl = self.widget(parent=user_lbl_frm, name="label", text="Name:", font=self.font, row=1, col=0, sticky="e")
-        self.name = self.widget(parent=user_lbl_frm, name="combo", font=self.font, row=1, col=1, sticky="w")
+        self.name = self.widget(parent=user_lbl_frm, name="combo", font=self.font, row=1, col=1, sticky="w", values=names)
+        names = self.user_options().get("names")
+        self.name.bind("<KeyRelease>", lambda event: self.combobox_filter(event, self.name, names))
 
         des_lbl = self.widget(parent=user_lbl_frm, name="label", text="Description:", font=self.font, row=2, col=0, sticky="e")
         self.des = self.widget(parent=user_lbl_frm, name="entry", font=self.font, row=2, col=1, sticky="w")
         self.des.delete(0, tk.END)
         self.des.insert(tk.END, "CC")
 
+        # Get current time in 24-hour format
+        current_time = time.strftime("%H:%M")
+        # print("Current time:", current_time)
         time_lbl = self.widget(parent=user_lbl_frm, name="label", text="Time:", font=self.font, row=3, col=0, sticky="e")
         self.time = self.widget(parent=user_lbl_frm, name="entry", font=self.font, row=3, col=1, sticky="w")
+        self.time.delete(0, tk.END)
+        self.time.insert(tk.END, current_time)
         
         if self.mode == "client":
             send_to_lbl = self.widget(parent=user_lbl_frm, name="label", text="Send to:", font=self.font, row=4, col=0, sticky="e")
             self.send_to = self.widget(parent=user_lbl_frm, name="combo", font=self.font, row=4, col=1, sticky="w")
+        
+        if self.mode == "server":
+            self.name["state"] = "disabled"
+            self.username["state"] = "disabled"
+            self.des.config(state='readonly')
+            self.time.config(state='readonly')
 
     def server_widgets(self):
         it_lbl_frm = self.widget(parent=self, name="lframe", text="IT Information", row=1, col=0, sticky="n")
@@ -137,7 +156,9 @@ class ITReportForm(tk.Tk):
         self.ip_address_widget = self.widget(parent=it_lbl_frm, name="combo", font=self.font, row=0, col=1, sticky="w")
 
         it_lbl = self.widget(parent=it_lbl_frm, name="label", text="IT Personel:", font=self.font, row=1, col=0, sticky="e")
-        self.it = self.widget(parent=it_lbl_frm, name="combo", font=self.font, row=1, col=1, sticky="w")
+        it_names = self.user_options().get("it")
+        self.it = self.widget(parent=it_lbl_frm, name="combo", font=self.font, row=1, col=1, sticky="w", values=it_names)
+        self.it.bind("<KeyRelease>", lambda event: self.combobox_filter(event, self.it, it_names))
 
         duration_lbl = self.widget(parent=it_lbl_frm, name="label", text="Duration:", font=self.font, row=2, col=0, sticky="e")
         self.duration = self.widget(parent=it_lbl_frm, name="entry", font=self.font, row=2, col=1, sticky="w")
@@ -169,16 +190,22 @@ class ITReportForm(tk.Tk):
         time = self.time.get()
         duration = self.duration.get()
         issue = self.issue.get().capitalize()
+        try:
+            if it_name == "" or issue == "" or duration == "":
+                raise ValueError("Seems like you did not fill all the data \nSorry you can not submit with bank field")
 
-        data = [it_name, username, name, des, ip_address, time, duration, issue]
+            data = [it_name, username, name, des, ip_address, time, duration, issue]
 
 
-        next_row = sheet.max_row + 1
-        for col, value in enumerate(data, start=2):
-            sheet.cell(row=next_row, column=col, value=value)
-        workbook.save("output.xlsx")
-        self.withdraw()
-        self.data_ready.set()
+            next_row = sheet.max_row + 1
+            for col, value in enumerate(data, start=2):
+                sheet.cell(row=next_row, column=col, value=value)
+            workbook.save("output.xlsx")
+            self.withdraw()
+            self.data_ready.set()
+        except Exception as e:
+            mb.showerror("Submission Error", e)
+
     
     # a mothod for sending data to the server 
     def send_data(self, client_socket):
@@ -204,16 +231,46 @@ class ITReportForm(tk.Tk):
     #         self.deiconify()
     #         self.client_socket.close()
 
+    def combobox_filter(self, event, combobox, option_values):
+        input_value = combobox.get()
+        threading.Thread(target=self.filter_options, args=(input_value, option_values, combobox), daemon=True).start()
+
+
+    def filter_options(self, typed_text, option_values, combobox):
+        # option_values = self.user_options().get("usernames")
+        filtered_values = []
+        if typed_text == "":
+            combobox["values"] = option_values
+        else:
+            for option in option_values:
+                if typed_text.lower() in option.lower():
+                    filtered_values.append(option)
+            self.after(0, lambda: self.update_combobox(typed_text, filtered_values, combobox))
+
+    def update_combobox(self, typed_text, values, combobox):
+        combobox["values"] = values
+        combobox.delete(0, tk.END)            # Clear the entry
+        combobox.insert(0, typed_text)        # Restore typed text
+        combobox.icursor(len(typed_text)) 
+        combobox.focus_set()
+        # self.after(50, lambda: self.username.event_generate('<Down>'))
+
+
+
+
+    def user_options(self):
+        # self.data = None
+        workbook = load_workbook("it_agent.xlsx")
+        sheet = workbook["Sheet1"]
+        return {
+            "usernames": [cell.value for cell in sheet["B"] if cell.value is not None],
+            "names": [cell.value for cell in sheet["A"] if cell.value is not None] ,
+            "it": [cell.value for cell in sheet["C"] if cell.value is not None] 
+        }
+
 
     def connect_server(self, client_socket):
-        # self.data = None
-        # workbook = load_workbook("output.xlsx")
-        # sheet = workbook["Sheet1"]
-        # data_opt = {
-        #     "usernames": [cell.value for cell in sheet["C"]],
-        #     "names": [cell.value for cell in sheet["D"]]        
-        # }
-        
+      
         addr = self.send_to.get()
         port = self.port
         ipv4_pattern = re.compile(r'^((25[0-5]|2[0-4][0-9]|[0-1]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[0-1]?[0-9][0-9]?)$')
@@ -345,8 +402,28 @@ if __name__ == "__main__":
     host = socket.gethostbyname(socket.gethostname())
     port = 12345
     data_queue = queue.Queue()
+
+    # Get the installation directory of the executable
+    if getattr(sys, 'frozen', False):
+        # When running from the bundled executable, get the installation directory
+        app_dir = os.path.dirname(sys.executable)
+    else:
+        # If running as a script (before packaging), use the current directory
+        app_dir = os.path.dirname(os.path.abspath(__file__))
+
+    # Define the path to the config.json file in the installation folder
+    config_path = os.path.join(app_dir, 'config.json')
+
+    # Open the config file
+    try:
+        with open(config_path, 'r') as file:
+            config_data = json.load(file)
+            print("Config loaded successfully:", config_data)
+    except FileNotFoundError:
+        print(f"Error: {config_path} not found.")
+
     while True:
-        mode = input("Enter mode(client/server): ").strip().lower()
+        mode = config_data.get("mode")
         if mode == "client" or mode == "server":
             if mode == "client":
                 app = ITReportForm(mode, port)
@@ -355,4 +432,3 @@ if __name__ == "__main__":
                 threading.Thread(target=server_start, args=(host, port, data_queue), daemon=True).start()
                 display_gui(data_queue)
             break
-        print("Please Enter Correct Mode")

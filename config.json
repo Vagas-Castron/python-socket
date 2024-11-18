@@ -1,5 +1,3 @@
 {
-    "host": "localhost",
-    "mode": "client",
-    "port": 12345
+    "mode": "client"
 }
