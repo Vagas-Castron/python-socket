@@ -3,7 +3,10 @@ from tkinter import messagebox as mb
 from tkinter import ttk
 import socket, threading
 import json
+from pystray import Icon, MenuItem, Menu
+from PIL import Image, ImageTk
 from openpyxl import load_workbook, Workbook
+from openpyxl.utils import get_column_letter
 import os, sys, re
 import queue
 import time
@@ -17,6 +20,8 @@ class ITReportForm(tk.Tk):
         self.port = port
         self.client_socket = client_socket
         self.data = None
+        self.tray_icon = None
+        self.option = "specific"
         self.data_ready = threading.Event()
 
         base_path = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
@@ -26,10 +31,10 @@ class ITReportForm(tk.Tk):
         if self.mode == "client":
             self.geometry(self._center_window(400, 250))
         else:
-            self.geometry(self._center_window(400, 400))
+            self.geometry(self._center_window(400, 450))
 
 
-        self.configure_gui(self, 3, 1)
+        self.configure_gui(self, 4, 1)
 
         self.create_widget()
         # if self.mode == "server":
@@ -49,22 +54,23 @@ class ITReportForm(tk.Tk):
 
     def create_widget(self):
         self.font = ("helvetica", 10)
-        btn_frm = self.widget(parent=self, name="frame", row=2, col=0, sticky="n")
-        self.configure_gui(btn_frm, 1, 2)
+        btn_frm = self.widget(parent=self, name="frame", row=3, col=0, sticky="n")
+        self.configure_gui(btn_frm, 1, 3)
         
         if self.mode == "client":
             self.client_widgets()
-            # self.start_client_thread()
+            self.user_lbl_frm.grid(row=0, column=0, sticky="s")
             submit_btn = self.widget(parent=btn_frm, name="button", text="Submit", row=0, col=1, command=self.start_client_thread)
 
         else:
-            self.withdraw()
+            self.minimize_to_tray()
             self.client_widgets()
             self.server_widgets()
-            # self.start_server_thread()
-            # self.server_start()
-            # self.receive_data()
-            # send_btn = self.widget(parent=btn_frm, name="button", text="Request", row=0, col=0, command=self.start_client_thread)
+            self.dropdown_frame = ttk.LabelFrame(self, text="General Problem")
+            self.add_dropdown_content()
+            self.config(menu=self.create_menu())
+            self.specific_issue()
+        
             submit_btn = self.widget(parent=btn_frm, name="button", text="Submit", row=0, col=1, command=self.on_data_submit)
         
 
@@ -99,49 +105,38 @@ class ITReportForm(tk.Tk):
         return widget
 
     def client_widgets(self):
-        # workbook = load_workbook("output.xlsx")
-        # sheet = workbook["Sheet1"]
-        # data_opt = {
-        #     "usernames": [cell.value for cell in sheet["C"]],
-        #     "names": [cell.value for cell in sheet["D"]]        
-        # }
-        # usernames = []
-        # names = []
-        # if self.mode == "client":
-        # data_opt = json.loads(self.client_socket.recv(1024).decode("utf-8"))
-            # usernames = data_opt.get("usernames", [])
-            # names = data_opt.get("names", [])
-        user_lbl_frm = self.widget(parent=self, name="lframe", text="User Details", row=0, col=0, sticky="s")
-        self.configure_gui(user_lbl_frm, 1, 1)
+
+        self.user_lbl_frm = ttk.LabelFrame(self, text="User Details")
+        self.configure_gui(self.user_lbl_frm, 1, 1)
 
         usernames = self.user_options().get("usernames")
-        username_lbl = self.widget(parent=user_lbl_frm, name="label", text="Username:", font=self.font, row=0, col=0, sticky="e")
-        self.username = self.widget(parent=user_lbl_frm, name="combo", font=self.font, row=0, col=1, sticky="w", values=usernames)
+        username_lbl = self.widget(parent=self.user_lbl_frm, name="label", text="Username:", font=self.font, row=0, col=0, sticky="e")
+        self.username = self.widget(parent=self.user_lbl_frm, name="combo", font=self.font, row=0, col=1, sticky="w", values=usernames)
         usernames = self.user_options().get("usernames")
         self.username.bind("<KeyRelease>", lambda event: self.combobox_filter(event, self.username, usernames))
 
         names = self.user_options().get("names")
-        name_lbl = self.widget(parent=user_lbl_frm, name="label", text="Name:", font=self.font, row=1, col=0, sticky="e")
-        self.name = self.widget(parent=user_lbl_frm, name="combo", font=self.font, row=1, col=1, sticky="w", values=names)
+        name_lbl = self.widget(parent=self.user_lbl_frm, name="label", text="Name:", font=self.font, row=1, col=0, sticky="e")
+        self.name = self.widget(parent=self.user_lbl_frm, name="combo", font=self.font, row=1, col=1, sticky="w", values=names)
         names = self.user_options().get("names")
         self.name.bind("<KeyRelease>", lambda event: self.combobox_filter(event, self.name, names))
 
-        des_lbl = self.widget(parent=user_lbl_frm, name="label", text="Description:", font=self.font, row=2, col=0, sticky="e")
-        self.des = self.widget(parent=user_lbl_frm, name="entry", font=self.font, row=2, col=1, sticky="w")
+        des_lbl = self.widget(parent=self.user_lbl_frm, name="label", text="Description:", font=self.font, row=2, col=0, sticky="e")
+        self.des = self.widget(parent=self.user_lbl_frm, name="entry", font=self.font, row=2, col=1, sticky="w")
         self.des.delete(0, tk.END)
         self.des.insert(tk.END, "CC")
 
         # Get current time in 24-hour format
         current_time = time.strftime("%H:%M")
         # print("Current time:", current_time)
-        time_lbl = self.widget(parent=user_lbl_frm, name="label", text="Time:", font=self.font, row=3, col=0, sticky="e")
-        self.time = self.widget(parent=user_lbl_frm, name="entry", font=self.font, row=3, col=1, sticky="w")
+        time_lbl = self.widget(parent=self.user_lbl_frm, name="label", text="Time:", font=self.font, row=3, col=0, sticky="e")
+        self.time = self.widget(parent=self.user_lbl_frm, name="entry", font=self.font, row=3, col=1, sticky="w")
         self.time.delete(0, tk.END)
         self.time.insert(tk.END, current_time)
         
         if self.mode == "client":
-            send_to_lbl = self.widget(parent=user_lbl_frm, name="label", text="Send to:", font=self.font, row=4, col=0, sticky="e")
-            self.send_to = self.widget(parent=user_lbl_frm, name="combo", font=self.font, row=4, col=1, sticky="w")
+            send_to_lbl = self.widget(parent=self.user_lbl_frm, name="label", text="Send to:", font=self.font, row=4, col=0, sticky="e")
+            self.send_to = self.widget(parent=self.user_lbl_frm, name="combo", font=self.font, row=4, col=1, sticky="w")
         
         if self.mode == "server":
             self.name["state"] = "disabled"
@@ -150,25 +145,89 @@ class ITReportForm(tk.Tk):
             self.time.config(state='readonly')
 
     def server_widgets(self):
-        it_lbl_frm = self.widget(parent=self, name="lframe", text="IT Information", row=1, col=0, sticky="n")
+        self.it_lbl_frm = ttk.LabelFrame(self, text="IT Details")
 
-        ip_lbl = self.widget(parent=it_lbl_frm, name="label", text="IP address:", font=self.font, row=0, col=0, sticky="e")
-        self.ip_address_widget = self.widget(parent=it_lbl_frm, name="combo", font=self.font, row=0, col=1, sticky="w")
+        ip_lbl = self.widget(parent=self.it_lbl_frm, name="label", text="IP address:", font=self.font, row=0, col=0, sticky="e")
+        self.ip_address_widget = self.widget(parent=self.it_lbl_frm, name="combo", font=self.font, row=0, col=1, sticky="w")
+        self.ip_address_widget["state"] = "disabled"
 
-        it_lbl = self.widget(parent=it_lbl_frm, name="label", text="IT Personel:", font=self.font, row=1, col=0, sticky="e")
+        it_lbl = self.widget(parent=self.it_lbl_frm, name="label", text="IT Personel:", font=self.font, row=1, col=0, sticky="e")
         it_names = self.user_options().get("it")
-        self.it = self.widget(parent=it_lbl_frm, name="combo", font=self.font, row=1, col=1, sticky="w", values=it_names)
+        self.it = self.widget(parent=self.it_lbl_frm, name="combo", font=self.font, row=1, col=1, sticky="w", values=it_names)
         self.it.bind("<KeyRelease>", lambda event: self.combobox_filter(event, self.it, it_names))
 
-        duration_lbl = self.widget(parent=it_lbl_frm, name="label", text="Duration:", font=self.font, row=2, col=0, sticky="e")
-        self.duration = self.widget(parent=it_lbl_frm, name="entry", font=self.font, row=2, col=1, sticky="w")
+        duration_lbl = self.widget(parent=self.it_lbl_frm, name="label", text="Duration:", font=self.font, row=2, col=0, sticky="e")
+        self.duration = self.widget(parent=self.it_lbl_frm, name="entry", font=self.font, row=2, col=1, sticky="w")
 
-        issue_lbl = self.widget(parent=it_lbl_frm, name="label", text="Issue:", font=self.font, row=3, col=0, sticky="e")
-        self.issue = self.widget(parent=it_lbl_frm, name="entry", font=self.font, row=3, col=1, sticky="w")
+        issue_lbl = self.widget(parent=self.it_lbl_frm, name="label", text="Issue:", font=self.font, row=3, col=0, sticky="e")
+        self.issue = self.widget(parent=self.it_lbl_frm, name="entry", font=self.font, row=3, col=1, sticky="w")
+
+    def create_menu(self):
+
+        menu = tk.Menu(self)
+
+        option_menu = tk.Menu(menu, tearoff=0)
+        option_menu.add_command(label="Agent Specific", command=self.specific_issue)
+        option_menu.add_command(label="Mass Issue", command=self.mass_issue)
+
+        menu.add_cascade(label="Options", menu=option_menu)
+        return menu
+    
+    # def add_dropdown_content(self):
+    #     """Add content to the dropdown frame."""
+    #     tk.Label(self.dropdown_frame, text="Choose an Option", bg="white").pack(pady=5)
+    #     tk.Button(self.dropdown_frame, text="Option 1", command=lambda: self.select_option("Option 1")).pack(fill="x")
+    #     tk.Button(self.dropdown_frame, text="Option 2", command=lambda: self.select_option("Option 2")).pack(fill="x")
+    #     tk.Button(self.dropdown_frame, text="Option 3", command=lambda: self.select_option("Option 3")).pack(fill="x")
+
+    def mass_issue(self):
+        self.dropdown_frame.grid(row=2, column=0, sticky="n", padx=5, pady=5)
+        self.user_lbl_frm.grid_remove()
+        self.it_lbl_frm.grid_remove()
+        self.option = "mass"
+    
+    def specific_issue(self):
+        self.user_lbl_frm.grid(row=0, column=0, sticky="s")
+        self.it_lbl_frm.grid(row=1, column=0, sticky="n")
+        self.mass_issue_txt.delete("1.0", tk.END)
+        self.dropdown_frame.grid_remove()  # Hide the frame
+        self.option = "specific"
+
+
+
+    def add_dropdown_content(self):
+
+        # self.option = "general"
+        issue_label = ttk.Label(self.dropdown_frame, text="NOTE: ", font=("helvetica", 10, "bold"))
+        issue_label.grid(row=0, column=0, padx=5, pady=5, sticky="ne")
+        self.mass_issue_txt = tk.Text(self.dropdown_frame, wrap="word", height=5, width=40, font=("helvetica", 10, "bold"))
+        self.mass_issue_txt.grid(row=0, column=1, padx=5, pady=5)
+    # def create_receive_widget(self):
 
     def start_client_thread(self):
         threading.Thread(target=self.connect_server, args=(self.client_socket,), daemon=True).start()
 
+    def minimize_to_tray(self):
+    # Hide the window
+        self.withdraw()
+
+        # Create an icon for the tray
+        image = Image.open("sign.ico")  # Replace with your icon file
+        menu = Menu(MenuItem("Show", self.show_window), MenuItem("Exit", self.exit_app))
+        self.tray_icon = Icon("name", image, "Report App", menu)
+        self.tray_icon.run()
+
+    # Function to handle showing the Tkinter window
+    def show_window(self, icon=None, item=None):
+        if self.tray_icon:
+            self.tray_icon.stop()
+        self.tray_icon = None
+        self.deiconify()
+
+    def exit_app(self, icon=None, item=None):
+        if self.tray_icon:
+            self.tray_icon.stop()
+        self.destroy()
 
     def on_data_submit(self):
         file_path = "output.xlsx"
@@ -190,19 +249,34 @@ class ITReportForm(tk.Tk):
         time = self.time.get()
         duration = self.duration.get()
         issue = self.issue.get().capitalize()
+        mass_issue = self.mass_issue_txt.get("1.0", tk.END).strip()
+
+        value_error = "Seems like you did not fill all the data \nSorry you can not submit with bank field"
         try:
-            if it_name == "" or issue == "" or duration == "":
-                raise ValueError("Seems like you did not fill all the data \nSorry you can not submit with bank field")
+            if self.option == "specific":
+                if it_name == "" or issue == "" or duration == "":
+                    raise ValueError(value_error)
 
-            data = [it_name, username, name, des, ip_address, time, duration, issue]
+                data = [it_name, username, name, des, ip_address, time, duration, issue]
 
-
-            next_row = sheet.max_row + 1
-            for col, value in enumerate(data, start=2):
-                sheet.cell(row=next_row, column=col, value=value)
+                next_row = sheet.max_row + 1
+                for col, value in enumerate(data, start=2):
+                    sheet.cell(row=next_row, column=col, value=value)
+            else:
+                if mass_issue == "":
+                    raise ValueError(value_error)
+                next_row = sheet.max_row + 1
+                start_col = 2
+                end_col =  9
+                data = mass_issue
+                merge_range = f"{get_column_letter(start_col)}{next_row}:{get_column_letter(end_col)}{next_row}"
+                sheet.merge_cells(merge_range)
+                sheet.cell(row=next_row, column=start_col, value=data)
+                self.specific_issue()
             workbook.save("output.xlsx")
-            self.withdraw()
             self.data_ready.set()
+            self.minimize_to_tray()
+            self.option = "receive"
         except Exception as e:
             mb.showerror("Submission Error", e)
 
@@ -217,19 +291,6 @@ class ITReportForm(tk.Tk):
             self.destroy()
         except Exception as e:
             print(f"Error: {e}")
-    
-    # A method/ function for receiving data from client and also calls update function fo update data to the GUI
-    # def receive_data(self):
-    #     # try:
-    #         data = self.client_socket.recv(1024).decode("utf-8")
-    #         # if not data:
-    #         #     raise  ValueError("No data received from client")
-    #         data = json.loads(data)
-    #         data["client_ip_addr"] = self.client_socket.getpeername()[0]
-    #         self.data = data
-    #         self.update_user_data()
-    #         self.deiconify()
-    #         self.client_socket.close()
 
     def combobox_filter(self, event, combobox, option_values):
         input_value = combobox.get()
@@ -255,9 +316,6 @@ class ITReportForm(tk.Tk):
         combobox.focus_set()
         # self.after(50, lambda: self.username.event_generate('<Down>'))
 
-
-
-
     def user_options(self):
         # self.data = None
         workbook = load_workbook("it_agent.xlsx")
@@ -267,7 +325,6 @@ class ITReportForm(tk.Tk):
             "names": [cell.value for cell in sheet["A"] if cell.value is not None] ,
             "it": [cell.value for cell in sheet["C"] if cell.value is not None] 
         }
-
 
     def connect_server(self, client_socket):
       
@@ -332,10 +389,10 @@ class ITReportForm(tk.Tk):
                 self.time.insert(tk.END, self.data.get("time"))
 
                 self.ip_address_widget.delete(0, tk.END)
-                self.ip_address_widget.insert(tk.END, self.data.get("client_ip_addr"))
-                self.deiconify()
+                self.ip_address_widget.set(self.data.get("client_ip_addr"))
+                # self.deiconify()
+                self.show_window()
                 self.data_ready.clear()
-
 
 
 def server_start(server_addr, server_port, data_queue):
@@ -381,6 +438,7 @@ def display_gui(queue):
     mode = "server"
     app = ITReportForm(mode=mode)
     threading.Thread(target=process_gui_queue, args=(app, queue), daemon=True).start()
+    app.protocol("WM_DELETE_WINDOW", app.minimize_to_tray)
     app.mainloop()
 
 def process_gui_queue(app, queue):
