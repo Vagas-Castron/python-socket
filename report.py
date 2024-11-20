@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import messagebox as mb
+from tkinter import messagebox as mb, filedialog
 from tkinter import ttk
 import socket, threading
 import json
@@ -7,9 +7,11 @@ from pystray import Icon, MenuItem, Menu
 from PIL import Image, ImageTk
 from openpyxl import load_workbook, Workbook
 from openpyxl.utils import get_column_letter
+from openpyxl.styles import NamedStyle
 import os, sys, re
 import queue
 import time
+from datetime import datetime
 
 
 
@@ -22,6 +24,7 @@ class ITReportForm(tk.Tk):
         self.data = None
         self.tray_icon = None
         self.option = "specific"
+        self.file_path = self.get_file_path()
         self.data_ready = threading.Event()
 
         base_path = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
@@ -123,26 +126,29 @@ class ITReportForm(tk.Tk):
 
         des_lbl = self.widget(parent=self.user_lbl_frm, name="label", text="Description:", font=self.font, row=2, col=0, sticky="e")
         self.des = self.widget(parent=self.user_lbl_frm, name="entry", font=self.font, row=2, col=1, sticky="w")
-        self.des.delete(0, tk.END)
-        self.des.insert(tk.END, "CC")
+
 
         # Get current time in 24-hour format
         current_time = time.strftime("%H:%M")
         # print("Current time:", current_time)
         time_lbl = self.widget(parent=self.user_lbl_frm, name="label", text="Time:", font=self.font, row=3, col=0, sticky="e")
         self.time = self.widget(parent=self.user_lbl_frm, name="entry", font=self.font, row=3, col=1, sticky="w")
-        self.time.delete(0, tk.END)
-        self.time.insert(tk.END, current_time)
         
         if self.mode == "client":
             send_to_lbl = self.widget(parent=self.user_lbl_frm, name="label", text="Send to:", font=self.font, row=4, col=0, sticky="e")
             self.send_to = self.widget(parent=self.user_lbl_frm, name="combo", font=self.font, row=4, col=1, sticky="w")
         
+        if self.mode == "client":
+            self.time.delete(0, tk.END)
+            self.time.insert(tk.END, current_time)
+            self.des.delete(0, tk.END)
+            self.des.insert(tk.END, "CC")
+
         if self.mode == "server":
             self.name["state"] = "disabled"
             self.username["state"] = "disabled"
-            self.des.config(state='readonly')
-            self.time.config(state='readonly')
+            # self.des.config(state='readonly')
+            # self.time.config(state='readonly')
 
     def server_widgets(self):
         self.it_lbl_frm = ttk.LabelFrame(self, text="IT Details")
@@ -170,22 +176,46 @@ class ITReportForm(tk.Tk):
         option_menu.add_command(label="Agent Specific", command=self.specific_issue)
         option_menu.add_command(label="Mass Issue", command=self.mass_issue)
 
+        preference_menu = tk.Menu(menu, tearoff=0)
+        preference_menu.add_command(label="Save To", command=self.set_file_path)
+
         menu.add_cascade(label="Options", menu=option_menu)
+        menu.add_cascade(label="Settings", menu=preference_menu)
         return menu
     
-    # def add_dropdown_content(self):
-    #     """Add content to the dropdown frame."""
-    #     tk.Label(self.dropdown_frame, text="Choose an Option", bg="white").pack(pady=5)
-    #     tk.Button(self.dropdown_frame, text="Option 1", command=lambda: self.select_option("Option 1")).pack(fill="x")
-    #     tk.Button(self.dropdown_frame, text="Option 2", command=lambda: self.select_option("Option 2")).pack(fill="x")
-    #     tk.Button(self.dropdown_frame, text="Option 3", command=lambda: self.select_option("Option 3")).pack(fill="x")
+    def set_file_path(self):
+        # Open the file dialog to select a file
+        file_path = filedialog.askopenfilename(title="Select a file", initialdir=self.file_path, filetypes=(("Text Files", "*.txt"), ("All Files", "*.*")))
+        
+        if file_path:
+            # Load the existing config file, or create a new one if it doesn't exist
+            try:
+                with open("config.json", "r") as f:
+                    config_file = json.load(f)  # Load existing config data
+            except FileNotFoundError:
+                config_file = {}  # If config.json doesn't exist, create a new dictionary
+
+            # Update the config with the new file path
+            config_file["file_path"] = file_path
+            
+            # Write the updated config data back to the file
+            with open("config.json", "w") as f:
+                json.dump(config_file, f, indent=4)  # Add indentation for readability
+
+    def get_file_path(self):
+        config_file = {}
+        with open("config.json", "r") as file:
+            config_file = json.load(file)
+        return config_file.get("file_path")
+        
 
     def mass_issue(self):
         self.dropdown_frame.grid(row=2, column=0, sticky="n", padx=5, pady=5)
         self.user_lbl_frm.grid_remove()
         self.it_lbl_frm.grid_remove()
         self.option = "mass"
-    
+
+
     def specific_issue(self):
         self.user_lbl_frm.grid(row=0, column=0, sticky="s")
         self.it_lbl_frm.grid(row=1, column=0, sticky="n")
@@ -223,24 +253,72 @@ class ITReportForm(tk.Tk):
             self.tray_icon.stop()
         self.tray_icon = None
         self.deiconify()
+        print("window shown?")
 
     def exit_app(self, icon=None, item=None):
         if self.tray_icon:
             self.tray_icon.stop()
         self.destroy()
 
+    def date_updater(self, sheet):
+        dates = [cell.value for cell in sheet["A"] if cell.value is not None]
+        dates = [datetime.strptime(str(date), "%Y-%m-%d").date() if isinstance(date, str) else date for date in dates]
+        current_date = datetime.now().date()
+        date_style = NamedStyle(name="custom_date_style", number_format="DD-MMM-YYYY")
+
+        if dates:
+            previous_date = max(dates)  # Assuming the dates are sorted or sparse
+            print(f"Previous recorded date: {previous_date}")
+        else:
+            print("No previous date found.")
+            previous_date = None
+        
+        if previous_date:
+            if current_date > previous_date.date():
+                next_row = sheet.max_row + 2
+                sheet[f"A{next_row}"] = current_date
+                sheet[f"A{next_row}"].number_format = "DD-MMM-YYYY"
+                return next_row
+            else:
+                return sheet.max_row + 1
+        else:
+            next_row = sheet.max_row + 1
+            sheet[f"A{next_row}"] = current_date
+            sheet[f"A{next_row}"].number_format = "DD-MMM-YYYY"
+            return next_row
+
+    def data_reset(self):
+        self.username.set("")
+        self.name.set("")
+        self.des.delete(0, tk.END)
+        self.time.delete(0, tk.END)
+        self.ip_address_widget.set("")
+        self.duration.delete(0, tk.END)
+        self.issue.delete(0, tk.END)
+        self.it.set("")
+
+    # def data_received(self):
+        
+
     def on_data_submit(self):
-        file_path = "output.xlsx"
+        file_path = self.get_file_path() or "output.xlsx"
+        try:
+            if file_path.split(".")[1] != "xlsx":
+                raise ValueError("Invalid file selected \nMake sure you have selected valid file for saving data")
+        except Exception as e:
+            mb.showerror("File Error", e)
+            return
 
         if os.path.exists(file_path):
 
-            workbook = load_workbook("output.xlsx")
+            workbook = load_workbook(file_path)
             sheet = workbook["Sheet1"]
+            print(file_path)
         else:
             workbook = Workbook()
             workbook.active.title = "Sheet1"
             sheet = workbook["Sheet1"]
-            
+
         it_name = self.it.get().upper()
         username = self.username.get()
         name = self.name.get().upper()
@@ -259,9 +337,10 @@ class ITReportForm(tk.Tk):
 
                 data = [it_name, username, name, des, ip_address, time, duration, issue]
 
-                next_row = sheet.max_row + 1
+                next_row = self.date_updater(sheet) #Update date and return (next_row) which next row should the data be added to, depending on date position
                 for col, value in enumerate(data, start=2):
                     sheet.cell(row=next_row, column=col, value=value)
+                self.data_reset()
             else:
                 if mass_issue == "":
                     raise ValueError(value_error)
@@ -273,12 +352,13 @@ class ITReportForm(tk.Tk):
                 sheet.merge_cells(merge_range)
                 sheet.cell(row=next_row, column=start_col, value=data)
                 self.specific_issue()
-            workbook.save("output.xlsx")
+                self.mass_issue_txt.delete("1.0", tk.END)
+            workbook.save(file_path)
             self.data_ready.set()
             self.minimize_to_tray()
-            self.option = "receive"
         except Exception as e:
             mb.showerror("Submission Error", e)
+        # finally:
 
     
     # a mothod for sending data to the server 
@@ -468,9 +548,8 @@ if __name__ == "__main__":
     else:
         # If running as a script (before packaging), use the current directory
         app_dir = os.path.dirname(os.path.abspath(__file__))
-
-    # Define the path to the config.json file in the installation folder
-    config_path = os.path.join(app_dir, 'config.json')
+        # Define the path to the config.json file in the installation folder
+        config_path = os.path.join(app_dir, 'config.json')
 
     # Open the config file
     try:
@@ -478,7 +557,8 @@ if __name__ == "__main__":
             config_data = json.load(file)
             print("Config loaded successfully:", config_data)
     except FileNotFoundError:
-        print(f"Error: {config_path} not found.")
+            print(f"Error: {config_path} not found.")
+
 
     while True:
         mode = config_data.get("mode")
