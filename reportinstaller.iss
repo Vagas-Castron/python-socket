@@ -4,7 +4,7 @@ AppVersion=1.0
 DefaultDirName={autopf}\ReportApp
 DefaultGroupName=ReportApp
 OutputDir=.
-OutputBaseFilename=MyAppSetup
+OutputBaseFilename=ITReportApp
 AllowNoIcons=False
 
 [Files]
@@ -13,6 +13,16 @@ Source: "C:\Users\Vagas\Documents\it report form\dist\report.exe"; DestDir: "{ap
 Source: "C:\Users\Vagas\Documents\it report form\it_agent.xlsx"; DestDir: "{app}"; Flags: ignoreversion
 Source: "C:\Users\Vagas\Documents\it report form\config.json"; DestDir: "{app}"; Flags: ignoreversion
 Source: "C:\Users\Vagas\Documents\it report form\sign.ico"; DestDir: "{app}"; Flags: ignoreversion
+//Source: "C:\Users\Vagas\Documents\it report form\app_folder_creation.py"; DestDir: "{app}"; Flags: ignoreversion
+//Source: "C:/Users/Vagas/AppData/Local/Programs/Python/Python37/python.exe"; DestDir: "{app}"; Flags: ignoreversion
+
+[Dirs]
+; Create the folder in AppData\Local
+Name: "{localappdata}\ReportApp"; Flags: uninsalwaysuninstall
+
+[Run]
+; Run the Python script after installation
+Filename: "{app}\python.exe"; Parameters: """{app}\app_folder_creation.py"""; WorkingDir: "{app}"; Flags: waituntilterminated
 
 [Icons]
 Name: "{commondesktop}\ReportApp"; Filename: "{app}\report.exe"; WorkingDir: "{app}"; IconFilename: "{app}\sign.ico"; IconIndex: 0

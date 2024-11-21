@@ -9,9 +9,10 @@ from openpyxl import load_workbook, Workbook
 from openpyxl.utils import get_column_letter
 from openpyxl.styles import NamedStyle
 import os, sys, re
+from pathlib import Path
 import queue
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 
@@ -23,9 +24,12 @@ class ITReportForm(tk.Tk):
         self.client_socket = client_socket
         self.data = None
         self.tray_icon = None
-        self.option = "specific"
-        self.file_path = self.get_file_path()
+        self.issue_option = "user-specific"
         self.data_ready = threading.Event()
+        
+        self.set_config_file()
+        self.file_path = self.get_file_path()
+
 
         base_path = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
         icon_path = os.path.join(base_path, "sign.ico")
@@ -174,64 +178,106 @@ class ITReportForm(tk.Tk):
 
         option_menu = tk.Menu(menu, tearoff=0)
         option_menu.add_command(label="Agent Specific", command=self.specific_issue)
-        option_menu.add_command(label="Mass Issue", command=self.mass_issue)
+        option_menu.add_command(label="Mass Issue", command=self.general_issue)
 
         preference_menu = tk.Menu(menu, tearoff=0)
-        preference_menu.add_command(label="Save To", command=self.set_file_path)
+        preference_menu.add_command(label="Save To", command=self.file_selector)
 
         menu.add_cascade(label="Options", menu=option_menu)
         menu.add_cascade(label="Settings", menu=preference_menu)
         return menu
-    
-    def set_file_path(self):
-        # Open the file dialog to select a file
-        file_path = filedialog.askopenfilename(title="Select a file", initialdir=self.file_path, filetypes=(("Text Files", "*.txt"), ("All Files", "*.*")))
-        
-        if file_path:
-            # Load the existing config file, or create a new one if it doesn't exist
-            try:
-                with open("config.json", "r") as f:
-                    config_file = json.load(f)  # Load existing config data
-            except FileNotFoundError:
-                config_file = {}  # If config.json doesn't exist, create a new dictionary
 
-            # Update the config with the new file path
-            config_file["file_path"] = file_path
-            
-            # Write the updated config data back to the file
-            with open("config.json", "w") as f:
-                json.dump(config_file, f, indent=4)  # Add indentation for readability
+    def get_app_folder(self):
+        # Cross-platform AppData path resolution
+        if os.name == 'nt':  # For Windows
+            app_data_path = os.getenv('LOCALAPPDATA')
+        else:  # For Linux/macOS
+            app_data_path = os.path.expanduser("~/.local/share")
+
+        # Validate if app_data_path is resolved
+        if not app_data_path:
+            raise EnvironmentError("Unable to locate AppData or equivalent directory.")
+        
+        # Define the path to your application's folder in AppData
+        app_folder = os.path.join(app_data_path, "ReportApp")  # Path to your custom folder
+        # Create the folder if it doesn't exist
+        os.makedirs(app_folder, exist_ok=True)
+        
+        return app_folder
+    
+    def file_selector(self):
+        # Open the file dialog to select a file
+        file_path = filedialog.askopenfilename(
+            title="Select a file", 
+            # initialdir=self.file_path, 
+            filetypes=(("Excel Files", "*.xlsx"), ("All Files", "*.*"))
+        )
+        self.set_config_file(file_path)
+        self.file_path = file_path
+
+
+    def set_config_file(self, file_path=None):
+
+        app_folder = self.get_app_folder()
+        config_file = os.path.join(app_folder, "config.json")
+
+        if not os.path.exists(config_file):
+            # If the file doesn't exist, create it and write the default data
+            # Get the path to the Desktop folder
+            desktop_path = Path.home() / 'Desktop'
+            config_data = {
+                "file_path": os.path.join(desktop_path, "output.xlsx"),  # Default path or data
+            }
+            with open(config_file, "w") as file:
+                json.dump(config_data, file, indent=4)
+        else:
+            if file_path:
+                try:
+                    with open(config_file, "r") as f:
+                        config_data = json.load(f)  # Load existing config data
+                        # Update the config with the new file path
+                        config_data["file_path"] = file_path
+
+                    with open(config_file, "w") as file:
+                        json.dump(config_data, file, indent=4)
+
+                except FileNotFoundError:
+                    config_file = {}  # If config.json doesn't exist, create a new dictionary
+        self.config_file = config_file
+
 
     def get_file_path(self):
-        config_file = {}
-        with open("config.json", "r") as file:
-            config_file = json.load(file)
-        return config_file.get("file_path")
+        try:
+            with open(self.config_file, "r") as file:
+                config_file = json.load(file)
+            return config_file.get("file_path")
+        except Exception:
+            print(Exception)
         
 
-    def mass_issue(self):
+    def general_issue(self):
         self.dropdown_frame.grid(row=2, column=0, sticky="n", padx=5, pady=5)
         self.user_lbl_frm.grid_remove()
         self.it_lbl_frm.grid_remove()
-        self.option = "mass"
+        self.issue_option = "general"
 
 
     def specific_issue(self):
         self.user_lbl_frm.grid(row=0, column=0, sticky="s")
         self.it_lbl_frm.grid(row=1, column=0, sticky="n")
-        self.mass_issue_txt.delete("1.0", tk.END)
+        # self.general_issue_txt.delete("1.0", tk.END)
         self.dropdown_frame.grid_remove()  # Hide the frame
-        self.option = "specific"
+        self.issue_option = "user-specific"
 
 
 
     def add_dropdown_content(self):
 
-        # self.option = "general"
+        # self.issue_option = "general"
         issue_label = ttk.Label(self.dropdown_frame, text="NOTE: ", font=("helvetica", 10, "bold"))
         issue_label.grid(row=0, column=0, padx=5, pady=5, sticky="ne")
-        self.mass_issue_txt = tk.Text(self.dropdown_frame, wrap="word", height=5, width=40, font=("helvetica", 10, "bold"))
-        self.mass_issue_txt.grid(row=0, column=1, padx=5, pady=5)
+        self.general_issue_txt = tk.Text(self.dropdown_frame, wrap="word", height=5, width=40, font=("helvetica", 10, "bold"))
+        self.general_issue_txt.grid(row=0, column=1, padx=5, pady=5)
     # def create_receive_widget(self):
 
     def start_client_thread(self):
@@ -259,6 +305,64 @@ class ITReportForm(tk.Tk):
         if self.tray_icon:
             self.tray_icon.stop()
         self.destroy()
+
+    def get_month_range_name(self):
+        """
+        Generates a string representing the current and next month in the format:
+        'CurrentMonth-NextMonth YYYY'
+        """
+        curr_date = datetime.now()
+        # Get the current and next month
+        current_month = curr_date.strftime("%B")  # e.g., "October"
+        prev_month_date = curr_date - timedelta(days=31)  # Jump to the previous month
+        prev_month = prev_month_date.strftime("%B")  # e.g., "November"
+        
+        # Get the year
+        year = prev_month_date.strftime("%Y")  # Year corresponds to the previous month
+        
+        # Create the sheet name
+        sheet_name = f"{current_month}-{prev_month} {year}"
+        print(sheet_name)
+        return sheet_name
+
+
+    def creat_new_worksheet(self, workbook):
+        today = datetime.now().date()
+        file_name = self.get_file_path() # Path to your existing workbook
+
+        # Format the sheet name as YYYY-MM-DD
+        sheet_name = self.get_month_range_name()
+        if today.day == 22:
+
+            # Check if the sheet already exists to avoid duplication
+            if sheet_name not in workbook.sheetnames:
+                # Add a new sheet with the specific name
+                worksheet = workbook.create_sheet(title=sheet_name)
+                workbook.active = workbook.sheetnames.index(worksheet.title)
+                print(f"Worksheet '{sheet_name}' added to the workbook.")
+            else:
+                print(f"Worksheet '{sheet_name}' already exists in the workbook.")
+
+            # Save the workbook
+            workbook.save(file_name)
+            print(f"Workbook saved as: {file_name}")
+            return workbook.active
+        else:
+            # Check if the workbook has only one sheet named "Sheet1"
+            if len(workbook.sheetnames) == 1 and workbook.active.title == "Sheet1":
+                # Remove "Sheet1"
+                sheet_to_remove = workbook["Sheet1"]
+                workbook.remove(sheet_to_remove)
+                
+                # Create a new custom-named sheet
+                new_sheet_name = sheet_name
+                workbook.create_sheet(new_sheet_name)
+                workbook.active = workbook.sheetnames.index(new_sheet_name)
+                workbook.save(file_name)
+                return workbook.active
+            return None
+
+    
 
     def date_updater(self, sheet):
         dates = [cell.value for cell in sheet["A"] if cell.value is not None]
@@ -288,36 +392,33 @@ class ITReportForm(tk.Tk):
             return next_row
 
     def data_reset(self):
-        self.username.set("")
-        self.name.set("")
-        self.des.delete(0, tk.END)
-        self.time.delete(0, tk.END)
-        self.ip_address_widget.set("")
-        self.duration.delete(0, tk.END)
-        self.issue.delete(0, tk.END)
-        self.it.set("")
+        if self.issue_option == "user-specific":
+            self.username.set("")
+            self.name.set("")
+            self.des.delete(0, tk.END)
+            self.time.delete(0, tk.END)
+            self.ip_address_widget.set("")
+            self.duration.delete(0, tk.END)
+            self.issue.delete(0, tk.END)
+            self.it.set("")
+        else:
+            self.general_issue_txt.delete("1.0", tk.END)
 
     # def data_received(self):
         
 
     def on_data_submit(self):
-        file_path = self.get_file_path() or "output.xlsx"
+        file_path = self.file_path
+
         try:
-            if file_path.split(".")[1] != "xlsx":
+            if file_path.split(".")[-1] != "xlsx":
                 raise ValueError("Invalid file selected \nMake sure you have selected valid file for saving data")
+            workbook = load_workbook(file_path)
+            sheet = self.creat_new_worksheet(workbook) or workbook.active
+            print(f"this is the working sheet {sheet.title}")
         except Exception as e:
             mb.showerror("File Error", e)
             return
-
-        if os.path.exists(file_path):
-
-            workbook = load_workbook(file_path)
-            sheet = workbook["Sheet1"]
-            print(file_path)
-        else:
-            workbook = Workbook()
-            workbook.active.title = "Sheet1"
-            sheet = workbook["Sheet1"]
 
         it_name = self.it.get().upper()
         username = self.username.get()
@@ -327,33 +428,35 @@ class ITReportForm(tk.Tk):
         time = self.time.get()
         duration = self.duration.get()
         issue = self.issue.get().capitalize()
-        mass_issue = self.mass_issue_txt.get("1.0", tk.END).strip()
+        general_issue = self.general_issue_txt.get("1.0", tk.END).strip()
 
         value_error = "Seems like you did not fill all the data \nSorry you can not submit with bank field"
         try:
-            if self.option == "specific":
+            if self.issue_option == "user-specific":
                 if it_name == "" or issue == "" or duration == "":
                     raise ValueError(value_error)
 
                 data = [it_name, username, name, des, ip_address, time, duration, issue]
 
                 next_row = self.date_updater(sheet) #Update date and return (next_row) which next row should the data be added to, depending on date position
+                print("testing if it reaches her moment before writing")
                 for col, value in enumerate(data, start=2):
                     sheet.cell(row=next_row, column=col, value=value)
-                self.data_reset()
             else:
-                if mass_issue == "":
+                if general_issue == "":
                     raise ValueError(value_error)
                 next_row = sheet.max_row + 1
                 start_col = 2
                 end_col =  9
-                data = mass_issue
+                data = general_issue
                 merge_range = f"{get_column_letter(start_col)}{next_row}:{get_column_letter(end_col)}{next_row}"
                 sheet.merge_cells(merge_range)
                 sheet.cell(row=next_row, column=start_col, value=data)
-                self.specific_issue()
-                self.mass_issue_txt.delete("1.0", tk.END)
+            print("testing if it reaches her moment before saving")
             workbook.save(file_path)
+            print(file_path)
+            self.data_reset()
+            self.specific_issue()
             self.data_ready.set()
             self.minimize_to_tray()
         except Exception as e:
@@ -549,8 +652,9 @@ if __name__ == "__main__":
         # If running as a script (before packaging), use the current directory
         app_dir = os.path.dirname(os.path.abspath(__file__))
         # Define the path to the config.json file in the installation folder
-        config_path = os.path.join(app_dir, 'config.json')
+    config_path = os.path.join(app_dir, 'config.json')
 
+    print(app_dir)
     # Open the config file
     try:
         with open(config_path, 'r') as file:
