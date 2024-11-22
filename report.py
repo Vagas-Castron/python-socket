@@ -4,10 +4,10 @@ from tkinter import ttk
 import socket, threading
 import json
 from pystray import Icon, MenuItem, Menu
-from PIL import Image, ImageTk
-from openpyxl import load_workbook, Workbook
+from PIL import Image
+from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
-from openpyxl.styles import NamedStyle
+from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 import os, sys, re
 from pathlib import Path
 import queue
@@ -36,7 +36,7 @@ class ITReportForm(tk.Tk):
         self.title("IT Report Form")
         self.iconbitmap(icon_path)
         if self.mode == "client":
-            self.geometry(self._center_window(400, 250))
+            self.geometry(self._center_window(400, 200))
         else:
             self.geometry(self._center_window(400, 450))
 
@@ -128,27 +128,19 @@ class ITReportForm(tk.Tk):
         names = self.user_options().get("names")
         self.name.bind("<KeyRelease>", lambda event: self.combobox_filter(event, self.name, names))
 
-        des_lbl = self.widget(parent=self.user_lbl_frm, name="label", text="Description:", font=self.font, row=2, col=0, sticky="e")
-        self.des = self.widget(parent=self.user_lbl_frm, name="entry", font=self.font, row=2, col=1, sticky="w")
-
-
-        # Get current time in 24-hour format
-        current_time = time.strftime("%H:%M")
-        # print("Current time:", current_time)
-        time_lbl = self.widget(parent=self.user_lbl_frm, name="label", text="Time:", font=self.font, row=3, col=0, sticky="e")
-        self.time = self.widget(parent=self.user_lbl_frm, name="entry", font=self.font, row=3, col=1, sticky="w")
         
         if self.mode == "client":
             send_to_lbl = self.widget(parent=self.user_lbl_frm, name="label", text="Send to:", font=self.font, row=4, col=0, sticky="e")
             self.send_to = self.widget(parent=self.user_lbl_frm, name="combo", font=self.font, row=4, col=1, sticky="w")
         
-        if self.mode == "client":
-            self.time.delete(0, tk.END)
-            self.time.insert(tk.END, current_time)
-            self.des.delete(0, tk.END)
-            self.des.insert(tk.END, "CC")
 
         if self.mode == "server":
+            des_lbl = self.widget(parent=self.user_lbl_frm, name="label", text="Description:", font=self.font, row=2, col=0, sticky="e")
+            self.des = self.widget(parent=self.user_lbl_frm, name="entry", font=self.font, row=2, col=1, sticky="w")
+
+
+            time_lbl = self.widget(parent=self.user_lbl_frm, name="label", text="Time:", font=self.font, row=3, col=0, sticky="e")
+            self.time = self.widget(parent=self.user_lbl_frm, name="entry", font=self.font, row=3, col=1, sticky="w")
             self.name["state"] = "disabled"
             self.username["state"] = "disabled"
             # self.des.config(state='readonly')
@@ -166,11 +158,12 @@ class ITReportForm(tk.Tk):
         self.it = self.widget(parent=self.it_lbl_frm, name="combo", font=self.font, row=1, col=1, sticky="w", values=it_names)
         self.it.bind("<KeyRelease>", lambda event: self.combobox_filter(event, self.it, it_names))
 
-        duration_lbl = self.widget(parent=self.it_lbl_frm, name="label", text="Duration:", font=self.font, row=2, col=0, sticky="e")
-        self.duration = self.widget(parent=self.it_lbl_frm, name="entry", font=self.font, row=2, col=1, sticky="w")
+        issue_lbl = self.widget(parent=self.it_lbl_frm, name="label", text="Issue:", font=self.font, row=2, col=0, sticky="e")
+        self.issue = self.widget(parent=self.it_lbl_frm, name="entry", font=self.font, row=2, col=1, sticky="w")
 
-        issue_lbl = self.widget(parent=self.it_lbl_frm, name="label", text="Issue:", font=self.font, row=3, col=0, sticky="e")
-        self.issue = self.widget(parent=self.it_lbl_frm, name="entry", font=self.font, row=3, col=1, sticky="w")
+        duration_lbl = self.widget(parent=self.it_lbl_frm, name="label", text="Duration:", font=self.font, row=3, col=0, sticky="e")
+        self.duration = self.widget(parent=self.it_lbl_frm, name="entry", font=self.font, row=3, col=1, sticky="w")
+
 
     def create_menu(self):
 
@@ -295,11 +288,11 @@ class ITReportForm(tk.Tk):
 
     # Function to handle showing the Tkinter window
     def show_window(self, icon=None, item=None):
+        self.deiconify()
         if self.tray_icon:
             self.tray_icon.stop()
         self.tray_icon = None
-        self.deiconify()
-        print("window shown?")
+        print("Window should now be visible.")
 
     def exit_app(self, icon=None, item=None):
         if self.tray_icon:
@@ -321,62 +314,106 @@ class ITReportForm(tk.Tk):
         year = prev_month_date.strftime("%Y")  # Year corresponds to the previous month
         
         # Create the sheet name
-        sheet_name = f"{current_month}-{prev_month} {year}"
+        sheet_name = f"{prev_month}-{current_month} {year}"
         print(sheet_name)
         return sheet_name
 
+    def remove_default_sheet(self, workbook):
+        # Check if the workbook has only one sheet named "Sheet1"
+        if len(workbook.sheetnames) == 1 and workbook.active.title == "Sheet1":
+            # Remove "Sheet1"
+            sheet_to_remove = workbook["Sheet1"]
+            workbook.remove(sheet_to_remove)
+
 
     def creat_new_worksheet(self, workbook):
-        today = datetime.now().date()
         file_name = self.get_file_path() # Path to your existing workbook
 
         # Format the sheet name as YYYY-MM-DD
         sheet_name = self.get_month_range_name()
-        if today.day == 22:
+        
 
-            # Check if the sheet already exists to avoid duplication
-            if sheet_name not in workbook.sheetnames:
-                # Add a new sheet with the specific name
-                worksheet = workbook.create_sheet(title=sheet_name)
-                workbook.active = workbook.sheetnames.index(worksheet.title)
-                print(f"Worksheet '{sheet_name}' added to the workbook.")
-            else:
-                print(f"Worksheet '{sheet_name}' already exists in the workbook.")
 
-            # Save the workbook
-            workbook.save(file_name)
-            print(f"Workbook saved as: {file_name}")
-            return workbook.active
-        else:
-            # Check if the workbook has only one sheet named "Sheet1"
-            if len(workbook.sheetnames) == 1 and workbook.active.title == "Sheet1":
-                # Remove "Sheet1"
-                sheet_to_remove = workbook["Sheet1"]
-                workbook.remove(sheet_to_remove)
-                
-                # Create a new custom-named sheet
-                new_sheet_name = sheet_name
-                workbook.create_sheet(new_sheet_name)
-                workbook.active = workbook.sheetnames.index(new_sheet_name)
-                workbook.save(file_name)
-                return workbook.active
-            return None
+        # Check if the sheet already exists to avoid duplication
+        if sheet_name not in workbook.sheetnames:
+            # Add a new sheet with the specific name
+            worksheet = workbook.create_sheet(title=sheet_name)
+            workbook.active = workbook.sheetnames.index(worksheet.title)
+            # Add the main title
+            month = self.get_month_range_name().split("-")
+            prev_month = month[0]
+            curr_month = month[1].split(" ")[0]
+            main_title = f"IT RELATED CASE REPORT AS OF {prev_month.upper()} 21 TO {curr_month.upper()} 20"
+            worksheet.merge_cells("A1:I2")  # Merge cells A1 to I1 for the title
+            title_cell = worksheet["A1"]
+            title_cell.value = main_title
+
+            # Style the title
+            title_cell.font = Font(name="Calibri", size=16, bold=True)
+            title_cell.alignment = Alignment(horizontal="center", vertical="center")
+            title_cell.fill = PatternFill(start_color="A9D08E", end_color="A9D08E", fill_type="solid")
+
+            # Add the field headers
+            fields = [
+                "Date", "IT", "Username", "Name", "Designation",
+                "Computer IP", "Time", "Resolution Time(min)", "Issue"
+            ]
+            # Set headers in row 3, starting from column A
+            large_cell = [2, 3, 4]
+            small_cell = [5, 6, 7]
+            medium_cell = [1, 8]
+            larger_cell = [9]
+            for col, field in enumerate(fields, start=1):
+                cell = worksheet.cell(row=3, column=col, value=field)
+                if col in large_cell:
+                    worksheet.column_dimensions[cell.column_letter].width = 28
+                if col in small_cell:
+                    worksheet.column_dimensions[cell.column_letter].width = 13
+                if col in medium_cell:
+                    worksheet.column_dimensions[cell.column_letter].width = 15
+                if col in larger_cell:
+                    worksheet.column_dimensions[cell.column_letter].width = 50
+
+            # Style the headers with background color
+            header_fill = PatternFill(start_color="FFE699", end_color="FFE699", fill_type="solid")  # Light blue background
+            for col in range(1, len(fields) + 1):  # Loop through all columns in the header row
+                cell = worksheet.cell(row=3, column=col)  # Header is on the second row
+                cell.fill = header_fill
+                cell.font = Font(name="Calibri", size=11, bold=True)  # Make header text bold
+                if col == 8:
+                    cell.font = Font(name="calibri", size=9, bold=True)
+                cell.alignment = Alignment(horizontal="center", vertical="center")  # Center-align text
+            # for col in worksheet.c
+
+        workbook.save(file_name)
+        return workbook.active
 
     
 
     def date_updater(self, sheet):
-        dates = [cell.value for cell in sheet["A"] if cell.value is not None]
-        dates = [datetime.strptime(str(date), "%Y-%m-%d").date() if isinstance(date, str) else date for date in dates]
+        raw_date_data = [cell.value for cell in sheet["A"] if cell.value is not None]
+        # print(f"this is the first dates: {dates}")
+        # Filter and process only valid dates
+        dates = []
+        for value in raw_date_data:
+            if isinstance(value, datetime):
+                # Already a datetime object
+                dates.append(value)
+            else:
+                try:
+                    # Attempt to parse string as date
+                    dates.append(datetime.strptime(value, "%d-%b-%Y").date())
+                except (ValueError, TypeError):
+                    # Skip invalid entries (like headers or titles)
+                    continue
+        dates = [datetime.strptime(str(date), "%d-%b-%Y").date() if isinstance(date, str) else date for date in dates]
         current_date = datetime.now().date()
-        date_style = NamedStyle(name="custom_date_style", number_format="DD-MMM-YYYY")
+        # date_style = NamedStyle(name="custom_date_style", number_format="DD-MMM-YYYY")
 
         if dates:
             previous_date = max(dates)  # Assuming the dates are sorted or sparse
-            print(f"Previous recorded date: {previous_date}")
         else:
-            print("No previous date found.")
             previous_date = None
-        
         if previous_date:
             if current_date > previous_date.date():
                 next_row = sheet.max_row + 2
@@ -390,6 +427,7 @@ class ITReportForm(tk.Tk):
             sheet[f"A{next_row}"] = current_date
             sheet[f"A{next_row}"].number_format = "DD-MMM-YYYY"
             return next_row
+        
 
     def data_reset(self):
         if self.issue_option == "user-specific":
@@ -409,13 +447,18 @@ class ITReportForm(tk.Tk):
 
     def on_data_submit(self):
         file_path = self.file_path
+        today = datetime.now().date()
 
         try:
             if file_path.split(".")[-1] != "xlsx":
                 raise ValueError("Invalid file selected \nMake sure you have selected valid file for saving data")
+            
             workbook = load_workbook(file_path)
-            sheet = self.creat_new_worksheet(workbook) or workbook.active
-            print(f"this is the working sheet {sheet.title}")
+            self.remove_default_sheet(workbook)
+            if today.day >= 21:
+                sheet = self.creat_new_worksheet(workbook)
+            else:
+                sheet = workbook.active
         except Exception as e:
             mb.showerror("File Error", e)
             return
@@ -425,6 +468,7 @@ class ITReportForm(tk.Tk):
         name = self.name.get().upper()
         des = self.des.get()
         ip_address = self.ip_address_widget.get()
+
         time = self.time.get()
         duration = self.duration.get()
         issue = self.issue.get().capitalize()
@@ -437,11 +481,19 @@ class ITReportForm(tk.Tk):
                     raise ValueError(value_error)
 
                 data = [it_name, username, name, des, ip_address, time, duration, issue]
-
+                center_align_col = [5, 8]
+                
+                thin_border = Border(left=Side(style='thin'), 
+                     right=Side(style='thin'), 
+                     top=Side(style='thin'), 
+                     bottom=Side(style='thin'))
                 next_row = self.date_updater(sheet) #Update date and return (next_row) which next row should the data be added to, depending on date position
-                print("testing if it reaches her moment before writing")
                 for col, value in enumerate(data, start=2):
                     sheet.cell(row=next_row, column=col, value=value)
+                    cell = sheet.cell(next_row, col)
+                    cell.border = thin_border
+                    if col in center_align_col:
+                        cell.alignment = Alignment(horizontal="center", vertical="center")
             else:
                 if general_issue == "":
                     raise ValueError(value_error)
@@ -452,13 +504,11 @@ class ITReportForm(tk.Tk):
                 merge_range = f"{get_column_letter(start_col)}{next_row}:{get_column_letter(end_col)}{next_row}"
                 sheet.merge_cells(merge_range)
                 sheet.cell(row=next_row, column=start_col, value=data)
-            print("testing if it reaches her moment before saving")
             workbook.save(file_path)
-            print(file_path)
             self.data_reset()
             self.specific_issue()
             self.data_ready.set()
-            self.minimize_to_tray()
+            # self.minimize_to_tray()
         except Exception as e:
             mb.showerror("Submission Error", e)
         # finally:
@@ -531,14 +581,11 @@ class ITReportForm(tk.Tk):
                     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     client_socket.connect((addr, port))
                     self.client_socket = client_socket
-                    print("Connection Accepted by server")
                     self.send_data(client_socket)
                 else:
-                    print(client_socket)
                     self.send_data(client_socket)
                     
             except socket.error as e:
-                print(f"Connection error: {e}")
                 mb.showinfo("Connection", f"{e}")
                 return
         else:
@@ -548,34 +595,34 @@ class ITReportForm(tk.Tk):
 
     def update_user_data(self, data=None):
         self.data = data
-        print("user data update function")
         if self.mode == "client":
             return {
                 "username": self.username.get(),
-                "name": self.name.get(),
-                "des": self.des.get(),
-                "time": self.time.get()
+                "name": self.name.get()
             }
         else:
-            print(self.data)
             if self.data:
+                # Get current time in 24-hour format
+                current_time = time.strftime("%H:%M")
                 self.username.configure(values=self.data.get("username"))
                 self.username.set(self.data.get("username"))
 
                 self.name.configure(values=self.data.get("name"))
                 self.name.set(self.data.get("name"))
-
+                
+                #Set description field with default value "CC" ignoring any value of des received
                 self.des.delete(0, tk.END)
-                self.des.insert(tk.END, self.data.get("des"))
+                self.des.insert(tk.END, "CC")
 
+                #Set time field with current time ignoring any value received
                 self.time.delete(0, tk.END)
-                self.time.insert(tk.END, self.data.get("time"))
+                self.time.insert(tk.END, current_time)
 
                 self.ip_address_widget.delete(0, tk.END)
                 self.ip_address_widget.set(self.data.get("client_ip_addr"))
-                # self.deiconify()
-                self.show_window()
                 self.data_ready.clear()
+            print(self.tray_icon)
+            self.show_window()
 
 
 def server_start(server_addr, server_port, data_queue):
@@ -583,7 +630,6 @@ def server_start(server_addr, server_port, data_queue):
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server_socket.bind((server_addr, server_port))
         server_socket.listen()
-        print("server started and listening")
         # display_gui(data_queue)
         threading.Thread(target=server_listening, args=(server_socket, data_queue,), daemon=True).start()
 
@@ -595,7 +641,6 @@ def server_listening(server_socket, data_queue):
     while True:
         try:
             client_socket, addr = server_socket.accept()
-            print(f"Client {addr} connected")
             threading.Thread(target=handle_clients, args=(client_socket ,data_queue), daemon=True).start()
         except socket.error as e:
             print(f"Error accepting connection: {e}")
@@ -617,7 +662,6 @@ def handle_clients(client_socket, data_queue):
 
 
 def display_gui(queue):
-    print("gui processing display")
     mode = "server"
     app = ITReportForm(mode=mode)
     threading.Thread(target=process_gui_queue, args=(app, queue), daemon=True).start()
@@ -628,7 +672,6 @@ def process_gui_queue(app, queue):
     while True:
         try:
             data = queue.get()  # Get data sent from the server
-            print("gui processing queue")
             if data == "STOP":
                 break
             # Process data and update GUI
@@ -654,12 +697,10 @@ if __name__ == "__main__":
         # Define the path to the config.json file in the installation folder
     config_path = os.path.join(app_dir, 'config.json')
 
-    print(app_dir)
     # Open the config file
     try:
         with open(config_path, 'r') as file:
             config_data = json.load(file)
-            print("Config loaded successfully:", config_data)
     except FileNotFoundError:
             print(f"Error: {config_path} not found.")
 

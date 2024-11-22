@@ -1,6 +1,6 @@
 [Setup]
 AppName=ReportApp
-AppVersion=1.0
+AppVersion=v1.0
 DefaultDirName={autopf}\ReportApp
 DefaultGroupName=ReportApp
 OutputDir=.
@@ -20,9 +20,9 @@ Source: "C:\Users\Vagas\Documents\it report form\sign.ico"; DestDir: "{app}"; Fl
 ; Create the folder in AppData\Local
 Name: "{localappdata}\ReportApp"; Flags: uninsalwaysuninstall
 
-[Run]
+;[Run]
 ; Run the Python script after installation
-Filename: "{app}\python.exe"; Parameters: """{app}\app_folder_creation.py"""; WorkingDir: "{app}"; Flags: waituntilterminated
+;Filename: "{app}\python.exe"; Parameters: """{app}\app_folder_creation.py"""; WorkingDir: "{app}"; Flags: waituntilterminated
 
 [Icons]
 Name: "{commondesktop}\ReportApp"; Filename: "{app}\report.exe"; WorkingDir: "{app}"; IconFilename: "{app}\sign.ico"; IconIndex: 0
