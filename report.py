@@ -30,7 +30,7 @@ class ITReportForm(tk.Tk):
         self.set_config_file()
         self.file_path = self.get_file_path()
 
-        self.file_format_config()
+        self.file_format_config(self.file_path)
 
         base_path = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
         icon_path = os.path.join(base_path, "sign.ico")
@@ -60,18 +60,17 @@ class ITReportForm(tk.Tk):
         for col in range(cols):
             frame.columnconfigure(col, weight=1)
 
-    def file_format_config(self):
+    def file_format_config(self, file_path):
         self.current_date = datetime.now().date()
         try:
             if self.file_path.split(".")[-1] not in ["xlsx", "xlsm"]:
                 raise ValueError("Invalid file selected \nMake sure you have selected valid file for saving data")
-            self.workbook = load_workbook(self.file_path)
+            self.workbook = load_workbook(file_path)
             self.remove_default_sheet(self.workbook)
-            self.sheet = self.creat_new_worksheet(self.workbook, self.current_date) or self.workbook.active
-            self.previous_date = self.date_updater(self.sheet).date()
+            self.sheet = self.creat_new_worksheet(self.file_path, self.workbook, self.current_date) or self.workbook.active
+            self.previous_date = self.date_updater(self.sheet)
         except Exception as e:
             mb.showerror("File Error", e)
-            return
 
     def create_widget(self):
         self.font = ("helvetica", 10)
@@ -95,7 +94,7 @@ class ITReportForm(tk.Tk):
             submit_btn = self.widget(parent=btn_frm, name="button", text="Submit", row=0, col=1, command=lambda: self.on_data_submit(
                         self.file_path, 
                         self.workbook, 
-                        self.sheet, 
+                        self.sheet
                     )
                 )
         
@@ -231,7 +230,7 @@ class ITReportForm(tk.Tk):
         )
         self.set_config_file(file_path)
         self.file_path = file_path
-        self.file_format_config()
+        self.file_format_config(file_path)
 
 
     def set_config_file(self, file_path=None):
@@ -331,15 +330,14 @@ class ITReportForm(tk.Tk):
         curr_date = datetime.now()
         # Get the current and next month
         current_month = curr_date.strftime("%B")  # e.g., "October"
-        prev_month_date = curr_date - timedelta(days=31)  # Jump to the previous month
-        prev_month = prev_month_date.strftime("%B")  # e.g., "November"
+        next_month_date = curr_date + timedelta(days=31)  # Jump to the previous month
+        next_month = next_month_date.strftime("%B")  # e.g., "November"
         
         # Get the year
-        year = prev_month_date.strftime("%Y")  # Year corresponds to the previous month
+        year = next_month_date.strftime("%Y")  # Year corresponds to the previous month
         
         # Create the sheet name
-        sheet_name = f"{prev_month}-{current_month} {year}"
-        print(sheet_name)
+        sheet_name = f"{current_month}-{next_month} {year}"
         return sheet_name
 
     def remove_default_sheet(self, workbook):
@@ -350,10 +348,11 @@ class ITReportForm(tk.Tk):
             workbook.remove(sheet_to_remove)    
 
 
-    def creat_new_worksheet(self, workbook, today):
-        file_name = self.get_file_path() # Path to your existing workbook
-        if today.day == 21:
+    def creat_new_worksheet(self, file_path, workbook, today):
+         # Path to your existing workbook
+        if today.day >= 21 or len(workbook.sheetnames) <= 1:
             # Format the sheet name as YYYY-MM-DD
+            print("hello start")
             sheet_name = self.get_month_range_name()
             
 
@@ -409,7 +408,7 @@ class ITReportForm(tk.Tk):
                     cell.alignment = Alignment(horizontal="center", vertical="center")  # Center-align text
                 # for col in worksheet.c
 
-            workbook.save(file_name)
+            workbook.save(file_path)
             return workbook.active
         return None
 
@@ -431,13 +430,12 @@ class ITReportForm(tk.Tk):
                     # Skip invalid entries (like headers or titles)
                     continue
         dates = [datetime.strptime(str(date), "%d-%b-%Y").date() if isinstance(date, str) else date for date in dates]
-        current_date = datetime.now().date()
         # date_style = NamedStyle(name="custom_date_style", number_format="DD-MMM-YYYY")
 
         if dates:
-            previous_date = max(dates) # Assuming the dates are sorted or sparse
-            return previous_date
+            return max(dates) # Assuming the dates are sorted or sparse
         else:
+            print(f"am in date: {dates}")
             return None
         #     previous_date = None
         # if previous_date:
@@ -468,30 +466,33 @@ class ITReportForm(tk.Tk):
         else:
             self.general_issue_txt.delete("1.0", tk.END)
 
-    # def data_received(self):
-        
 
     def on_data_submit(self, file_path, workbook, sheet):
-        if (self.current_date - self.previous_date).days != 0:
-            next_row = sheet.max_row + 2
+        if self.previous_date:
+            if (self.current_date - self.previous_date.date()).days != 0:
+                next_row = sheet.max_row + 2
+                sheet[f"A{next_row}"] = self.current_date
+                sheet[f"A{next_row}"].number_format = "DD-MMM-YYYY"
+                self.previous_date = self.current_date
+            else:
+                next_row = sheet.max_row + 1
+        else:
+            next_row = sheet.max_row + 1
             sheet[f"A{next_row}"] = self.current_date
             sheet[f"A{next_row}"].number_format = "DD-MMM-YYYY"
             self.previous_date = self.current_date
-        else:
-            next_row = sheet.max_row + 1
         
         try:
             value_error = "Seems like you did not fill all the data \nSorry you can not submit with bank field"
-            it_name = self.it.get().upper()
-            username = self.username.get()
-            name = self.name.get().upper()
-            des = self.des.get()
-            ip_address = self.ip_address_widget.get()
-            time = self.time.get()
-            duration = int(self.duration.get())
-            issue = self.issue.get().capitalize()
-            general_issue = self.general_issue_txt.get("1.0", tk.END).strip()
             if self.issue_option == "user-specific":
+                it_name = self.it.get().upper()
+                username = self.username.get()
+                name = self.name.get().upper()
+                des = self.des.get()
+                ip_address = self.ip_address_widget.get()
+                time = self.time.get()
+                duration = int(self.duration.get())
+                issue = self.issue.get().capitalize()
                 if it_name == "" or issue == "" or duration == "":
                     raise ValueError(value_error)
                 # if isinstance(duration, ):
@@ -509,9 +510,9 @@ class ITReportForm(tk.Tk):
                     if col in center_align_col:
                         cell.alignment = Alignment(horizontal="center", vertical="center")
             else:
+                general_issue = self.general_issue_txt.get("1.0", tk.END).upper().strip()
                 if general_issue == "":
                     raise ValueError(value_error)
-                next_row = sheet.max_row + 1
                 start_col = 2
                 end_col =  9
                 data = general_issue
