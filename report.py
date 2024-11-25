@@ -30,6 +30,7 @@ class ITReportForm(tk.Tk):
         self.set_config_file()
         self.file_path = self.get_file_path()
 
+        self.file_format_config()
 
         base_path = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
         icon_path = os.path.join(base_path, "sign.ico")
@@ -59,6 +60,19 @@ class ITReportForm(tk.Tk):
         for col in range(cols):
             frame.columnconfigure(col, weight=1)
 
+    def file_format_config(self):
+        self.current_date = datetime.now().date()
+        try:
+            if self.file_path.split(".")[-1] not in ["xlsx", "xlsm"]:
+                raise ValueError("Invalid file selected \nMake sure you have selected valid file for saving data")
+            self.workbook = load_workbook(self.file_path)
+            self.remove_default_sheet(self.workbook)
+            self.sheet = self.creat_new_worksheet(self.workbook, self.current_date) or self.workbook.active
+            self.previous_date = self.date_updater(self.sheet).date()
+        except Exception as e:
+            mb.showerror("File Error", e)
+            return
+
     def create_widget(self):
         self.font = ("helvetica", 10)
         btn_frm = self.widget(parent=self, name="frame", row=3, col=0, sticky="n")
@@ -78,7 +92,12 @@ class ITReportForm(tk.Tk):
             self.config(menu=self.create_menu())
             self.specific_issue()
         
-            submit_btn = self.widget(parent=btn_frm, name="button", text="Submit", row=0, col=1, command=self.on_data_submit)
+            submit_btn = self.widget(parent=btn_frm, name="button", text="Submit", row=0, col=1, command=lambda: self.on_data_submit(
+                        self.file_path, 
+                        self.workbook, 
+                        self.sheet, 
+                    )
+                )
         
 
     def widget(self, **kwargs):
@@ -128,10 +147,17 @@ class ITReportForm(tk.Tk):
         names = self.user_options().get("names")
         self.name.bind("<KeyRelease>", lambda event: self.combobox_filter(event, self.name, names))
 
+        # Get current time in AM/PM-hour format
+        current_time = time.strftime("%I:%M:%S %p")
+        time_lbl = self.widget(parent=self.user_lbl_frm, name="label", text="Time:", font=self.font, row=3, col=0, sticky="e")
+        self.time = self.widget(parent=self.user_lbl_frm, name="entry", font=self.font, row=3, col=1, sticky="w")
+
         
         if self.mode == "client":
             send_to_lbl = self.widget(parent=self.user_lbl_frm, name="label", text="Send to:", font=self.font, row=4, col=0, sticky="e")
             self.send_to = self.widget(parent=self.user_lbl_frm, name="combo", font=self.font, row=4, col=1, sticky="w")
+            self.time.delete(0, tk.END)
+            self.time.insert(tk.END, current_time)
         
 
         if self.mode == "server":
@@ -139,8 +165,6 @@ class ITReportForm(tk.Tk):
             self.des = self.widget(parent=self.user_lbl_frm, name="entry", font=self.font, row=2, col=1, sticky="w")
 
 
-            time_lbl = self.widget(parent=self.user_lbl_frm, name="label", text="Time:", font=self.font, row=3, col=0, sticky="e")
-            self.time = self.widget(parent=self.user_lbl_frm, name="entry", font=self.font, row=3, col=1, sticky="w")
             self.name["state"] = "disabled"
             self.username["state"] = "disabled"
             # self.des.config(state='readonly')
@@ -207,6 +231,7 @@ class ITReportForm(tk.Tk):
         )
         self.set_config_file(file_path)
         self.file_path = file_path
+        self.file_format_config()
 
 
     def set_config_file(self, file_path=None):
@@ -292,7 +317,6 @@ class ITReportForm(tk.Tk):
         if self.tray_icon:
             self.tray_icon.stop()
         self.tray_icon = None
-        print("Window should now be visible.")
 
     def exit_app(self, icon=None, item=None):
         if self.tray_icon:
@@ -323,73 +347,73 @@ class ITReportForm(tk.Tk):
         if len(workbook.sheetnames) == 1 and workbook.active.title == "Sheet1":
             # Remove "Sheet1"
             sheet_to_remove = workbook["Sheet1"]
-            workbook.remove(sheet_to_remove)
+            workbook.remove(sheet_to_remove)    
 
 
-    def creat_new_worksheet(self, workbook):
+    def creat_new_worksheet(self, workbook, today):
         file_name = self.get_file_path() # Path to your existing workbook
+        if today.day == 21:
+            # Format the sheet name as YYYY-MM-DD
+            sheet_name = self.get_month_range_name()
+            
 
-        # Format the sheet name as YYYY-MM-DD
-        sheet_name = self.get_month_range_name()
-        
 
+            # Check if the sheet already exists to avoid duplication
+            if sheet_name not in workbook.sheetnames:
+                # Add a new sheet with the specific name
+                worksheet = workbook.create_sheet(title=sheet_name)
+                workbook.active = workbook.sheetnames.index(worksheet.title)
+                # Add the main title
+                month = self.get_month_range_name().split("-")
+                prev_month = month[0]
+                curr_month = month[1].split(" ")[0]
+                main_title = f"IT RELATED CASE REPORT AS OF {prev_month.upper()} 21 TO {curr_month.upper()} 20"
+                worksheet.merge_cells("A1:I2")  # Merge cells A1 to I1 for the title
+                title_cell = worksheet["A1"]
+                title_cell.value = main_title
 
-        # Check if the sheet already exists to avoid duplication
-        if sheet_name not in workbook.sheetnames:
-            # Add a new sheet with the specific name
-            worksheet = workbook.create_sheet(title=sheet_name)
-            workbook.active = workbook.sheetnames.index(worksheet.title)
-            # Add the main title
-            month = self.get_month_range_name().split("-")
-            prev_month = month[0]
-            curr_month = month[1].split(" ")[0]
-            main_title = f"IT RELATED CASE REPORT AS OF {prev_month.upper()} 21 TO {curr_month.upper()} 20"
-            worksheet.merge_cells("A1:I2")  # Merge cells A1 to I1 for the title
-            title_cell = worksheet["A1"]
-            title_cell.value = main_title
+                # Style the title
+                title_cell.font = Font(name="Calibri", size=16, bold=True)
+                title_cell.alignment = Alignment(horizontal="center", vertical="center")
+                title_cell.fill = PatternFill(start_color="A9D08E", end_color="A9D08E", fill_type="solid")
 
-            # Style the title
-            title_cell.font = Font(name="Calibri", size=16, bold=True)
-            title_cell.alignment = Alignment(horizontal="center", vertical="center")
-            title_cell.fill = PatternFill(start_color="A9D08E", end_color="A9D08E", fill_type="solid")
+                # Add the field headers
+                fields = [
+                    "Date", "IT", "Username", "Name", "Designation",
+                    "Computer IP", "Time", "Resolution Time(min)", "Issue"
+                ]
+                # Set headers in row 3, starting from column A
+                large_cell = [2, 3, 4]
+                small_cell = [5, 6, 7]
+                medium_cell = [1, 8]
+                larger_cell = [9]
+                for col, field in enumerate(fields, start=1):
+                    cell = worksheet.cell(row=3, column=col, value=field)
+                    if col in large_cell:
+                        worksheet.column_dimensions[cell.column_letter].width = 28
+                    if col in small_cell:
+                        worksheet.column_dimensions[cell.column_letter].width = 13
+                    if col in medium_cell:
+                        worksheet.column_dimensions[cell.column_letter].width = 15
+                    if col in larger_cell:
+                        worksheet.column_dimensions[cell.column_letter].width = 50
 
-            # Add the field headers
-            fields = [
-                "Date", "IT", "Username", "Name", "Designation",
-                "Computer IP", "Time", "Resolution Time(min)", "Issue"
-            ]
-            # Set headers in row 3, starting from column A
-            large_cell = [2, 3, 4]
-            small_cell = [5, 6, 7]
-            medium_cell = [1, 8]
-            larger_cell = [9]
-            for col, field in enumerate(fields, start=1):
-                cell = worksheet.cell(row=3, column=col, value=field)
-                if col in large_cell:
-                    worksheet.column_dimensions[cell.column_letter].width = 28
-                if col in small_cell:
-                    worksheet.column_dimensions[cell.column_letter].width = 13
-                if col in medium_cell:
-                    worksheet.column_dimensions[cell.column_letter].width = 15
-                if col in larger_cell:
-                    worksheet.column_dimensions[cell.column_letter].width = 50
+                # Style the headers with background color
+                header_fill = PatternFill(start_color="FFE699", end_color="FFE699", fill_type="solid")  # Light blue background
+                for col in range(1, len(fields) + 1):  # Loop through all columns in the header row
+                    cell = worksheet.cell(row=3, column=col)  # Header is on the second row
+                    cell.fill = header_fill
+                    cell.font = Font(name="Calibri", size=11, bold=True)  # Make header text bold
+                    if col == 8:
+                        cell.font = Font(name="calibri", size=9, bold=True)
+                    cell.alignment = Alignment(horizontal="center", vertical="center")  # Center-align text
+                # for col in worksheet.c
 
-            # Style the headers with background color
-            header_fill = PatternFill(start_color="FFE699", end_color="FFE699", fill_type="solid")  # Light blue background
-            for col in range(1, len(fields) + 1):  # Loop through all columns in the header row
-                cell = worksheet.cell(row=3, column=col)  # Header is on the second row
-                cell.fill = header_fill
-                cell.font = Font(name="Calibri", size=11, bold=True)  # Make header text bold
-                if col == 8:
-                    cell.font = Font(name="calibri", size=9, bold=True)
-                cell.alignment = Alignment(horizontal="center", vertical="center")  # Center-align text
-            # for col in worksheet.c
-
-        workbook.save(file_name)
-        return workbook.active
+            workbook.save(file_name)
+            return workbook.active
+        return None
 
     
-
     def date_updater(self, sheet):
         raw_date_data = [cell.value for cell in sheet["A"] if cell.value is not None]
         # print(f"this is the first dates: {dates}")
@@ -411,22 +435,24 @@ class ITReportForm(tk.Tk):
         # date_style = NamedStyle(name="custom_date_style", number_format="DD-MMM-YYYY")
 
         if dates:
-            previous_date = max(dates)  # Assuming the dates are sorted or sparse
+            previous_date = max(dates) # Assuming the dates are sorted or sparse
+            return previous_date
         else:
-            previous_date = None
-        if previous_date:
-            if current_date > previous_date.date():
-                next_row = sheet.max_row + 2
-                sheet[f"A{next_row}"] = current_date
-                sheet[f"A{next_row}"].number_format = "DD-MMM-YYYY"
-                return next_row
-            else:
-                return sheet.max_row + 1
-        else:
-            next_row = sheet.max_row + 1
-            sheet[f"A{next_row}"] = current_date
-            sheet[f"A{next_row}"].number_format = "DD-MMM-YYYY"
-            return next_row
+            return None
+        #     previous_date = None
+        # if previous_date:
+        #     if current_date > previous_date.date():
+        #         next_row = sheet.max_row + 2
+        #         sheet[f"A{next_row}"] = current_date
+        #         sheet[f"A{next_row}"].number_format = "DD-MMM-YYYY"
+        #         return next_row
+        #     else:
+        #         return sheet.max_row + 1
+        # else:
+        #     next_row = sheet.max_row + 1
+        #     sheet[f"A{next_row}"] = current_date
+        #     sheet[f"A{next_row}"].number_format = "DD-MMM-YYYY"
+        #     return next_row
         
 
     def data_reset(self):
@@ -445,41 +471,30 @@ class ITReportForm(tk.Tk):
     # def data_received(self):
         
 
-    def on_data_submit(self):
-        file_path = self.file_path
-        today = datetime.now().date()
-
+    def on_data_submit(self, file_path, workbook, sheet):
+        if (self.current_date - self.previous_date).days != 0:
+            next_row = sheet.max_row + 2
+            sheet[f"A{next_row}"] = self.current_date
+            sheet[f"A{next_row}"].number_format = "DD-MMM-YYYY"
+            self.previous_date = self.current_date
+        else:
+            next_row = sheet.max_row + 1
+        
         try:
-            if file_path.split(".")[-1] != "xlsx":
-                raise ValueError("Invalid file selected \nMake sure you have selected valid file for saving data")
-            
-            workbook = load_workbook(file_path)
-            self.remove_default_sheet(workbook)
-            if today.day >= 21:
-                sheet = self.creat_new_worksheet(workbook)
-            else:
-                sheet = workbook.active
-        except Exception as e:
-            mb.showerror("File Error", e)
-            return
-
-        it_name = self.it.get().upper()
-        username = self.username.get()
-        name = self.name.get().upper()
-        des = self.des.get()
-        ip_address = self.ip_address_widget.get()
-
-        time = self.time.get()
-        duration = self.duration.get()
-        issue = self.issue.get().capitalize()
-        general_issue = self.general_issue_txt.get("1.0", tk.END).strip()
-
-        value_error = "Seems like you did not fill all the data \nSorry you can not submit with bank field"
-        try:
+            value_error = "Seems like you did not fill all the data \nSorry you can not submit with bank field"
+            it_name = self.it.get().upper()
+            username = self.username.get()
+            name = self.name.get().upper()
+            des = self.des.get()
+            ip_address = self.ip_address_widget.get()
+            time = self.time.get()
+            duration = int(self.duration.get())
+            issue = self.issue.get().capitalize()
+            general_issue = self.general_issue_txt.get("1.0", tk.END).strip()
             if self.issue_option == "user-specific":
                 if it_name == "" or issue == "" or duration == "":
                     raise ValueError(value_error)
-
+                # if isinstance(duration, ):
                 data = [it_name, username, name, des, ip_address, time, duration, issue]
                 center_align_col = [5, 8]
                 
@@ -487,7 +502,6 @@ class ITReportForm(tk.Tk):
                      right=Side(style='thin'), 
                      top=Side(style='thin'), 
                      bottom=Side(style='thin'))
-                next_row = self.date_updater(sheet) #Update date and return (next_row) which next row should the data be added to, depending on date position
                 for col, value in enumerate(data, start=2):
                     sheet.cell(row=next_row, column=col, value=value)
                     cell = sheet.cell(next_row, col)
@@ -509,6 +523,8 @@ class ITReportForm(tk.Tk):
             self.specific_issue()
             self.data_ready.set()
             # self.minimize_to_tray()
+        except ValueError:
+            mb.showerror("Value Error", "Interger value is expected for duration \nPlease verify you input before submit")
         except Exception as e:
             mb.showerror("Submission Error", e)
         # finally:
@@ -598,12 +614,13 @@ class ITReportForm(tk.Tk):
         if self.mode == "client":
             return {
                 "username": self.username.get(),
-                "name": self.name.get()
+                "name": self.name.get(),
+                "time": self.time.get()
             }
         else:
             if self.data:
-                # Get current time in 24-hour format
-                current_time = time.strftime("%H:%M")
+
+
                 self.username.configure(values=self.data.get("username"))
                 self.username.set(self.data.get("username"))
 
@@ -616,7 +633,7 @@ class ITReportForm(tk.Tk):
 
                 #Set time field with current time ignoring any value received
                 self.time.delete(0, tk.END)
-                self.time.insert(tk.END, current_time)
+                self.time.insert(tk.END, self.data.get("time"))
 
                 self.ip_address_widget.delete(0, tk.END)
                 self.ip_address_widget.set(self.data.get("client_ip_addr"))
@@ -663,10 +680,13 @@ def handle_clients(client_socket, data_queue):
 
 def display_gui(queue):
     mode = "server"
-    app = ITReportForm(mode=mode)
-    threading.Thread(target=process_gui_queue, args=(app, queue), daemon=True).start()
-    app.protocol("WM_DELETE_WINDOW", app.minimize_to_tray)
-    app.mainloop()
+    try:
+        app = ITReportForm(mode=mode)
+        threading.Thread(target=process_gui_queue, args=(app, queue), daemon=True).start()
+        app.protocol("WM_DELETE_WINDOW", app.minimize_to_tray)
+        app.mainloop()
+    except Exception as e:
+        print(f"Error: {e}")
 
 def process_gui_queue(app, queue):
     while True:
