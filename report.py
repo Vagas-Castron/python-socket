@@ -23,14 +23,14 @@ class ITReportForm(tk.Tk):
         self.port = port
         self.client_socket = client_socket
         self.data = None
-        self.tray_icon = None
-        self.issue_option = "user-specific"
-        self.data_ready = threading.Event()
         
-        self.set_config_file()
-        self.file_path = self.get_file_path()
-
-        self.file_format_config(self.file_path)
+        if self.mode == "server":
+            self.tray_icon = None
+            self.issue_option = "user-specific"
+            self.data_ready = threading.Event()
+            self.set_config_file()
+            self.file_path = self.get_file_path()
+            self.file_format_config(self.file_path)
 
         base_path = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
         icon_path = os.path.join(base_path, "sign.ico")
@@ -61,16 +61,38 @@ class ITReportForm(tk.Tk):
             frame.columnconfigure(col, weight=1)
 
     def file_format_config(self, file_path):
-        self.current_date = datetime.now().date()
+        current_date = datetime.now().date()
         try:
-            if self.file_path.split(".")[-1] not in ["xlsx", "xlsm"]:
+            if file_path.split(".")[-1] not in ["xlsx", "xlsm"]:
                 raise ValueError("Invalid file selected \nMake sure you have selected valid file for saving data")
-            self.workbook = load_workbook(file_path)
-            self.remove_default_sheet(self.workbook)
-            self.sheet = self.creat_new_worksheet(self.file_path, self.workbook, self.current_date) or self.workbook.active
-            self.previous_date = self.date_updater(self.sheet)
+            workbook = load_workbook(file_path)
+            self.remove_default_sheet(workbook)
+            sheet = self.creat_new_worksheet(self.file_path, workbook, current_date) or workbook.active
+            self.previous_date = self.date_updater(sheet)
+            print(self.previous_date)
+            self.next_row = self.next_row_check(sheet, current_date)
+            workbook.save(file_path)
+
         except Exception as e:
             mb.showerror("File Error", e)
+    
+    def next_row_check(self, sheet, current_date):
+        if self.previous_date:
+            if (current_date - self.previous_date.date()).days != 0:
+                next_row = sheet.max_row + 2
+                sheet[f"A{next_row}"] = current_date
+                sheet[f"A{next_row}"].number_format = "DD-MMM-YYYY"
+                self.previous_date = current_date
+                return next_row
+            else:
+                next_row = sheet.max_row + 1
+                return next_row
+        else:
+            next_row = sheet.max_row + 1
+            sheet[f"A{next_row}"] = current_date
+            sheet[f"A{next_row}"].number_format = "DD-MMM-YYYY"
+            self.previous_date = current_date
+            return next_row
 
     def create_widget(self):
         self.font = ("helvetica", 10)
@@ -91,12 +113,7 @@ class ITReportForm(tk.Tk):
             self.config(menu=self.create_menu())
             self.specific_issue()
         
-            submit_btn = self.widget(parent=btn_frm, name="button", text="Submit", row=0, col=1, command=lambda: self.on_data_submit(
-                        self.file_path, 
-                        self.workbook, 
-                        self.sheet
-                    )
-                )
+            submit_btn = self.widget(parent=btn_frm, name="button", text="Submit", row=0, col=1, command=self.on_data_submit)
         
 
     def widget(self, **kwargs):
@@ -352,7 +369,6 @@ class ITReportForm(tk.Tk):
          # Path to your existing workbook
         if today.day >= 21 or len(workbook.sheetnames) <= 1:
             # Format the sheet name as YYYY-MM-DD
-            print("hello start")
             sheet_name = self.get_month_range_name()
             
 
@@ -433,6 +449,7 @@ class ITReportForm(tk.Tk):
         # date_style = NamedStyle(name="custom_date_style", number_format="DD-MMM-YYYY")
 
         if dates:
+            print(max(dates))
             return max(dates) # Assuming the dates are sorted or sparse
         else:
             print(f"am in date: {dates}")
@@ -467,23 +484,18 @@ class ITReportForm(tk.Tk):
             self.general_issue_txt.delete("1.0", tk.END)
 
 
-    def on_data_submit(self, file_path, workbook, sheet):
-        if self.previous_date:
-            if (self.current_date - self.previous_date.date()).days != 0:
-                next_row = sheet.max_row + 2
-                sheet[f"A{next_row}"] = self.current_date
-                sheet[f"A{next_row}"].number_format = "DD-MMM-YYYY"
-                self.previous_date = self.current_date
-            else:
-                next_row = sheet.max_row + 1
-        else:
-            next_row = sheet.max_row + 1
-            sheet[f"A{next_row}"] = self.current_date
-            sheet[f"A{next_row}"].number_format = "DD-MMM-YYYY"
-            self.previous_date = self.current_date
-        
+    def on_data_submit(self):
+        file_path = self.file_path
+        current_date = datetime.now().date()
         try:
-            value_error = "Seems like you did not fill all the data \nSorry you can not submit with bank field"
+            if self.previous_date:
+                print(self.previous_date)
+                if (current_date - self.previous_date).days != 0:
+                    self.file_format_config(file_path)
+            workbook = load_workbook(file_path)
+            sheet = workbook.active
+        
+            value_error = "Seems like you did not fill all the data \nSorry you can not submit with blank field \nAnd also duration should be an integer value"
             if self.issue_option == "user-specific":
                 it_name = self.it.get().upper()
                 username = self.username.get()
@@ -493,9 +505,9 @@ class ITReportForm(tk.Tk):
                 time = self.time.get()
                 duration = int(self.duration.get())
                 issue = self.issue.get().capitalize()
-                if it_name == "" or issue == "" or duration == "":
+                if it_name == "" or issue == "" or duration == "" or username == "":
                     raise ValueError(value_error)
-                # if isinstance(duration, ):
+                duration = int(duration)
                 data = [it_name, username, name, des, ip_address, time, duration, issue]
                 center_align_col = [5, 8]
                 
@@ -504,9 +516,9 @@ class ITReportForm(tk.Tk):
                      top=Side(style='thin'), 
                      bottom=Side(style='thin'))
                 for col, value in enumerate(data, start=2):
-                    sheet.cell(row=next_row, column=col, value=value)
-                    cell = sheet.cell(next_row, col)
-                    cell.border = thin_border
+                    sheet.cell(row=self.next_row, column=col, value=value)
+                    cell = sheet.cell(self.next_row, col)
+                    # cell.border = thin_border
                     if col in center_align_col:
                         cell.alignment = Alignment(horizontal="center", vertical="center")
             else:
@@ -516,16 +528,21 @@ class ITReportForm(tk.Tk):
                 start_col = 2
                 end_col =  9
                 data = general_issue
-                merge_range = f"{get_column_letter(start_col)}{next_row}:{get_column_letter(end_col)}{next_row}"
+                merge_range = f"{get_column_letter(start_col)}{self.next_row}:{get_column_letter(end_col)}{self.next_row}"
                 sheet.merge_cells(merge_range)
-                sheet.cell(row=next_row, column=start_col, value=data)
+                sheet.cell(row=self.next_row, column=start_col, value=data)
             workbook.save(file_path)
+            self.next_row = sheet.max_row + 1
             self.data_reset()
             self.specific_issue()
             self.data_ready.set()
             # self.minimize_to_tray()
+        except AttributeError:
+            mb.showerror("File Error", f"There is issue in writing to the file: {self.file_path} \nClose the file if it is open, then reselect it as saving file from the settings option menu, \nOR simply select another file")
         except ValueError:
-            mb.showerror("Value Error", "Interger value is expected for duration \nPlease verify you input before submit")
+            mb.showerror("Value Error", value_error)
+        # except TypeError as e:
+        #     mb.showerror("Type Error", e)
         except Exception as e:
             mb.showerror("Submission Error", e)
         # finally:
