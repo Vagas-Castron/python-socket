@@ -20,24 +20,27 @@ class ITReportForm(tk.Tk):
     def __init__(self, mode, port=None, client_socket=None):
         super().__init__()
         self.mode = mode
-        self.port = port
+        self.set_config_file()
         self.client_socket = client_socket
-        self.data = None
+        self.port = port
         
         if self.mode == "server":
+            self.data = None
             self.tray_icon = None
             self.issue_option = "user-specific"
             self.data_ready = threading.Event()
-            self.set_config_file()
-            self.file_path = self.get_file_path()
-            self.file_format_config(self.file_path)
+            self.writing_file_path = self.get_writing_file_path()
+            self.file_format_config(self.writing_file_path)
+            print(self.writing_file_path)
+
 
         base_path = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
         icon_path = os.path.join(base_path, "sign.ico")
         self.title("IT Report Form")
         self.iconbitmap(icon_path)
         if self.mode == "client":
-            self.geometry(self._center_window(400, 200))
+            print("center")
+            self.geometry(self._center_window(400, 250))
         else:
             self.geometry(self._center_window(400, 450))
 
@@ -60,18 +63,19 @@ class ITReportForm(tk.Tk):
         for col in range(cols):
             frame.columnconfigure(col, weight=1)
 
-    def file_format_config(self, file_path):
+    def file_format_config(self, writing_file_path):
         current_date = datetime.now().date()
+        print("date testing")
         try:
-            if file_path.split(".")[-1] not in ["xlsx", "xlsm"]:
+            if writing_file_path.split(".")[-1] not in ["xlsx", "xlsm"]:
                 raise ValueError("Invalid file selected \nMake sure you have selected valid file for saving data")
-            workbook = load_workbook(file_path)
+            workbook = load_workbook(writing_file_path)
             self.remove_default_sheet(workbook)
-            sheet = self.creat_new_worksheet(self.file_path, workbook, current_date) or workbook.active
+            sheet = self.creat_new_worksheet(self.writing_file_path, workbook, current_date) or workbook.active
             self.previous_date = self.date_updater(sheet)
             print(self.previous_date)
             self.next_row = self.next_row_check(sheet, current_date)
-            workbook.save(file_path)
+            workbook.save(writing_file_path)
 
         except Exception as e:
             mb.showerror("File Error", e)
@@ -82,16 +86,16 @@ class ITReportForm(tk.Tk):
                 next_row = sheet.max_row + 2
                 sheet[f"A{next_row}"] = current_date
                 sheet[f"A{next_row}"].number_format = "DD-MMM-YYYY"
-                self.previous_date = current_date
+                self.previous_date = datetime.combine(current_date, datetime.min.time())
                 return next_row
             else:
-                next_row = sheet.max_row + 1
+                next_row = sheet.max_row
                 return next_row
         else:
             next_row = sheet.max_row + 1
             sheet[f"A{next_row}"] = current_date
             sheet[f"A{next_row}"].number_format = "DD-MMM-YYYY"
-            self.previous_date = current_date
+            self.previous_date = datetime.combine(current_date, datetime.min.time())
             return next_row
 
     def create_widget(self):
@@ -103,6 +107,9 @@ class ITReportForm(tk.Tk):
             self.client_widgets()
             self.user_lbl_frm.grid(row=0, column=0, sticky="s")
             submit_btn = self.widget(parent=btn_frm, name="button", text="Submit", row=0, col=1, command=self.start_client_thread)
+            # self.dropdown_frame = ttk.LabelFrame(self, text="General Problem")
+            # self.add_dropdown_content()
+            self.config(menu=self.create_menu())
 
         else:
             self.minimize_to_tray()
@@ -209,15 +216,19 @@ class ITReportForm(tk.Tk):
 
         menu = tk.Menu(self)
 
-        option_menu = tk.Menu(menu, tearoff=0)
-        option_menu.add_command(label="Agent Specific", command=self.specific_issue)
-        option_menu.add_command(label="Mass Issue", command=self.general_issue)
-
         preference_menu = tk.Menu(menu, tearoff=0)
-        preference_menu.add_command(label="Save To", command=self.file_selector)
+        if self.mode == "server":
+            option_menu = tk.Menu(menu, tearoff=0)
+            option_menu.add_command(label="Agent Specific", command=self.specific_issue)
+            option_menu.add_command(label="Mass Issue", command=self.general_issue)
+            preference_menu.add_command(label="Save To", command=self.set_writing_file_path)
 
-        menu.add_cascade(label="Options", menu=option_menu)
-        menu.add_cascade(label="Settings", menu=preference_menu)
+
+            menu.add_cascade(label="Options", menu=option_menu)
+        else:
+            preference_menu.add_command(label="Read from", command=self.set_reading_file_path)
+
+        menu.add_cascade(label="Settings", menu=preference_menu)    
         return menu
 
     def get_app_folder(self):
@@ -238,19 +249,29 @@ class ITReportForm(tk.Tk):
         
         return app_folder
     
-    def file_selector(self):
+    def set_writing_file_path(self):
         # Open the file dialog to select a file
-        file_path = filedialog.askopenfilename(
+        writing_file_path = filedialog.askopenfilename(
             title="Select a file", 
-            # initialdir=self.file_path, 
+            # initialdir=self.writing_file_path, 
             filetypes=(("Excel Files", "*.xlsx"), ("All Files", "*.*"))
         )
-        self.set_config_file(file_path)
-        self.file_path = file_path
-        self.file_format_config(file_path)
+        self.set_config_file(writing_file_path=writing_file_path)
+        self.writing_file_path = writing_file_path
+        self.file_format_config(writing_file_path)
+
+    def set_reading_file_path(self):
+        # Open the file dialog to select a file
+        reading_file_path = filedialog.askopenfilename(
+            title="Select a file", 
+            # initialdir=self.writing_file_path, 
+            filetypes=(("Excel Files", "*.xlsx"), ("All Files", "*.*"))
+        )
+        self.set_config_file(reading_file_path=reading_file_path)
+        self.user_options()
 
 
-    def set_config_file(self, file_path=None):
+    def set_config_file(self, writing_file_path=None, reading_file_path=None):
 
         app_folder = self.get_app_folder()
         config_file = os.path.join(app_folder, "config.json")
@@ -260,17 +281,31 @@ class ITReportForm(tk.Tk):
             # Get the path to the Desktop folder
             desktop_path = Path.home() / 'Desktop'
             config_data = {
-                "file_path": os.path.join(desktop_path, "output.xlsx"),  # Default path or data
+                "writing_file_path": os.path.join(desktop_path, "output.xlsx"),  # Default path or data
+                "reading_file_path": os.path.join(os.path.dirname(sys.executable), "it_agent.xlsx")
             }
             with open(config_file, "w") as file:
                 json.dump(config_data, file, indent=4)
         else:
-            if file_path:
+            if writing_file_path:
                 try:
                     with open(config_file, "r") as f:
                         config_data = json.load(f)  # Load existing config data
                         # Update the config with the new file path
-                        config_data["file_path"] = file_path
+                        config_data["writing_file_path"] = writing_file_path
+
+                    with open(config_file, "w") as file:
+                        json.dump(config_data, file, indent=4)
+
+                except FileNotFoundError:
+                    config_file = {}  # If config.json doesn't exist, create a new dictionary
+            
+            if reading_file_path:
+                try:
+                    with open(config_file, "r") as f:
+                        config_data = json.load(f)  # Load existing config data
+                        # Update the config with the new file path
+                        config_data["reading_file_path"] = reading_file_path
 
                     with open(config_file, "w") as file:
                         json.dump(config_data, file, indent=4)
@@ -280,13 +315,23 @@ class ITReportForm(tk.Tk):
         self.config_file = config_file
 
 
-    def get_file_path(self):
+    def get_writing_file_path(self):
         try:
             with open(self.config_file, "r") as file:
                 config_file = json.load(file)
-            return config_file.get("file_path")
+            return config_file.get("writing_file_path")
         except Exception:
             print(Exception)
+
+    def get_reading_file_path(self):
+        print(self.config_file)
+        try:
+            with open(self.config_file, "r") as file:
+                config_file = json.load(file)
+            print(config_file)
+            return config_file.get("reading_file_path")
+        except Exception:
+            print(f"{Exception}, yes")
         
 
     def general_issue(self):
@@ -365,7 +410,7 @@ class ITReportForm(tk.Tk):
             workbook.remove(sheet_to_remove)    
 
 
-    def creat_new_worksheet(self, file_path, workbook, today):
+    def creat_new_worksheet(self, writing_file_path, workbook, today):
          # Path to your existing workbook
         if today.day >= 21 or len(workbook.sheetnames) <= 1:
             # Format the sheet name as YYYY-MM-DD
@@ -424,7 +469,7 @@ class ITReportForm(tk.Tk):
                     cell.alignment = Alignment(horizontal="center", vertical="center")  # Center-align text
                 # for col in worksheet.c
 
-            workbook.save(file_path)
+            workbook.save(writing_file_path)
             return workbook.active
         return None
 
@@ -485,14 +530,18 @@ class ITReportForm(tk.Tk):
 
 
     def on_data_submit(self):
-        file_path = self.file_path
-        current_date = datetime.now().date()
+        writing_file_path = self.writing_file_path
+        current_date = datetime.now()
+        print(f"this part1 works and current date is {current_date}")
         try:
+            print(f"current date: {current_date} \nPrevious date: {self.previous_date}")
             if self.previous_date:
                 print(self.previous_date)
                 if (current_date - self.previous_date).days != 0:
-                    self.file_format_config(file_path)
-            workbook = load_workbook(file_path)
+                    self.file_format_config(writing_file_path)
+                print(f"this part2 works and current date is {current_date}")
+            print(f"this part3 works and current date is {current_date}")
+            workbook = load_workbook(writing_file_path)
             sheet = workbook.active
         
             value_error = "Seems like you did not fill all the data \nSorry you can not submit with blank field \nAnd also duration should be an integer value"
@@ -531,14 +580,14 @@ class ITReportForm(tk.Tk):
                 merge_range = f"{get_column_letter(start_col)}{self.next_row}:{get_column_letter(end_col)}{self.next_row}"
                 sheet.merge_cells(merge_range)
                 sheet.cell(row=self.next_row, column=start_col, value=data)
-            workbook.save(file_path)
+            workbook.save(writing_file_path)
             self.next_row = sheet.max_row + 1
             self.data_reset()
             self.specific_issue()
             self.data_ready.set()
             # self.minimize_to_tray()
         except AttributeError:
-            mb.showerror("File Error", f"There is issue in writing to the file: {self.file_path} \nClose the file if it is open, then reselect it as saving file from the settings option menu, \nOR simply select another file")
+            mb.showerror("File Error", f"There is issue in writing to the file: {self.writing_file_path} \nClose the file if it is open, then reselect it as saving file from the settings option menu, \nOR simply select another file")
         except ValueError:
             mb.showerror("Value Error", value_error)
         # except TypeError as e:
@@ -584,8 +633,7 @@ class ITReportForm(tk.Tk):
         # self.after(50, lambda: self.username.event_generate('<Down>'))
 
     def user_options(self):
-        # self.data = None
-        workbook = load_workbook("it_agent.xlsx")
+        workbook = load_workbook(self.get_reading_file_path())
         sheet = workbook["Sheet1"]
         return {
             "usernames": [cell.value for cell in sheet["B"] if cell.value is not None],
@@ -721,7 +769,22 @@ def process_gui_queue(app, queue):
 
 
 if __name__ == "__main__":
-    host = socket.gethostbyname(socket.gethostname())
+    hosts = socket.gethostbyname_ex(socket.gethostname())[2]
+    required_host = ""
+    try:
+        for host in hosts:
+            if "10.6" in host:
+                required_host = host
+                break
+        if required_host == "":
+            raise ValueError("Can not find correct ip address range on any interface \nConfigure IP address and Possibly add route to routing table")
+    except ValueError as e:
+        root = tk.Tk()
+        root.withdraw()
+        result = mb.showerror("IP Address error", e)
+        if result:
+            sys.exit()
+        root.mainloop()
     port = 12345
     data_queue = queue.Queue()
 
@@ -750,6 +813,6 @@ if __name__ == "__main__":
                 app = ITReportForm(mode, port)
                 app.mainloop()
             else:
-                threading.Thread(target=server_start, args=(host, port, data_queue), daemon=True).start()
+                threading.Thread(target=server_start, args=(required_host, port, data_queue), daemon=True).start()
                 display_gui(data_queue)
             break

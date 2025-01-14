@@ -9,16 +9,17 @@ AllowNoIcons=False
 
 [Files]
 ; Include the main program file
-Source: "C:\Users\Vagas\Documents\it report form\dist\report.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "C:\Users\Vagas\Documents\it report form\it_agent.xlsx"; DestDir: "{app}"; Flags: ignoreversion
-Source: "C:\Users\Vagas\Documents\it report form\config.json"; DestDir: "{app}"; Flags: ignoreversion
-Source: "C:\Users\Vagas\Documents\it report form\sign.ico"; DestDir: "{app}"; Flags: ignoreversion
+Source: "C:\Users\Vagas\Desktop\reporting project\dist\report.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "C:\Users\Vagas\Desktop\reporting project\it_agent.xlsx"; DestDir: "{app}"; Flags: ignoreversion
+Source: "C:\Users\Vagas\Desktop\reporting project\config.json"; DestDir: "{app}"; Flags: ignoreversion
+Source: "C:\Users\Vagas\Desktop\reporting project\sign.ico"; DestDir: "{app}"; Flags: ignoreversion
 //Source: "C:\Users\Vagas\Documents\it report form\app_folder_creation.py"; DestDir: "{app}"; Flags: ignoreversion
 //Source: "C:/Users/Vagas/AppData/Local/Programs/Python/Python37/python.exe"; DestDir: "{app}"; Flags: ignoreversion
 
 [Dirs]
 ; Create the folder in AppData\Local
 Name: "{localappdata}\ReportApp"; Flags: uninsalwaysuninstall
+
 
 ;[Run]
 ; Run the Python script after installation

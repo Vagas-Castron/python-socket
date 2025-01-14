@@ -1,4 +1,4 @@
-('C:\\Users\\Vagas\\Documents\\it report form\\build\\report\\PYZ-00.pyz',
+('C:\\Users\\Vagas\\Desktop\\reporting project\\build\\report\\PYZ-00.pyz',
  [('PIL',
    'c:\\users\\vagas\\appdata\\local\\programs\\python\\python37\\lib\\site-packages\\PIL\\__init__.py',
    'PYMODULE'),
