@@ -23,26 +23,25 @@ class ITReportForm(tk.Tk):
         self.set_config_file()
         self.client_socket = client_socket
         self.port = port
+        self.data = None
         
         if self.mode == "server":
-            self.data = None
             self.tray_icon = None
             self.issue_option = "user-specific"
             self.data_ready = threading.Event()
             self.writing_file_path = self.get_writing_file_path()
             self.file_format_config(self.writing_file_path)
-            print(self.writing_file_path)
 
 
         base_path = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
         icon_path = os.path.join(base_path, "sign.ico")
         self.title("IT Report Form")
         self.iconbitmap(icon_path)
-        if self.mode == "client":
-            print("center")
-            self.geometry(self._center_window(400, 250))
-        else:
+        
+        if self.mode == "server":
             self.geometry(self._center_window(400, 450))
+        else:
+            self.geometry(self._center_window(400, 250))
 
 
         self.configure_gui(self, 4, 1)
@@ -65,7 +64,6 @@ class ITReportForm(tk.Tk):
 
     def file_format_config(self, writing_file_path):
         current_date = datetime.now().date()
-        print("date testing")
         try:
             if writing_file_path.split(".")[-1] not in ["xlsx", "xlsm"]:
                 raise ValueError("Invalid file selected \nMake sure you have selected valid file for saving data")
@@ -73,14 +71,13 @@ class ITReportForm(tk.Tk):
             self.remove_default_sheet(workbook)
             sheet = self.creat_new_worksheet(self.writing_file_path, workbook, current_date) or workbook.active
             self.previous_date = self.date_updater(sheet)
-            print(self.previous_date)
-            self.next_row = self.next_row_check(sheet, current_date)
+            self.next_row = self.next_row_checker(sheet, current_date)
             workbook.save(writing_file_path)
 
         except Exception as e:
             mb.showerror("File Error", e)
     
-    def next_row_check(self, sheet, current_date):
+    def next_row_checker(self, sheet, current_date):
         if self.previous_date:
             if (current_date - self.previous_date.date()).days != 0:
                 next_row = sheet.max_row + 2
@@ -225,8 +222,8 @@ class ITReportForm(tk.Tk):
 
 
             menu.add_cascade(label="Options", menu=option_menu)
-        else:
-            preference_menu.add_command(label="Read from", command=self.set_reading_file_path)
+
+        preference_menu.add_command(label="Read from", command=self.set_reading_file_path)
 
         menu.add_cascade(label="Settings", menu=preference_menu)    
         return menu
@@ -324,14 +321,12 @@ class ITReportForm(tk.Tk):
             print(Exception)
 
     def get_reading_file_path(self):
-        print(self.config_file)
         try:
             with open(self.config_file, "r") as file:
                 config_file = json.load(file)
-            print(config_file)
             return config_file.get("reading_file_path")
         except Exception:
-            print(f"{Exception}, yes")
+            print({Exception})
         
 
     def general_issue(self):
@@ -494,10 +489,8 @@ class ITReportForm(tk.Tk):
         # date_style = NamedStyle(name="custom_date_style", number_format="DD-MMM-YYYY")
 
         if dates:
-            print(max(dates))
             return max(dates) # Assuming the dates are sorted or sparse
         else:
-            print(f"am in date: {dates}")
             return None
         #     previous_date = None
         # if previous_date:
@@ -532,17 +525,14 @@ class ITReportForm(tk.Tk):
     def on_data_submit(self):
         writing_file_path = self.writing_file_path
         current_date = datetime.now()
-        print(f"this part1 works and current date is {current_date}")
         try:
-            print(f"current date: {current_date} \nPrevious date: {self.previous_date}")
-            if self.previous_date:
-                print(self.previous_date)
-                if (current_date - self.previous_date).days != 0:
-                    self.file_format_config(writing_file_path)
-                print(f"this part2 works and current date is {current_date}")
-            print(f"this part3 works and current date is {current_date}")
             workbook = load_workbook(writing_file_path)
             sheet = workbook.active
+            if self.previous_date:
+                if (current_date - self.previous_date).days != 0:
+                    self.file_format_config(writing_file_path)
+                else:
+                    next_row = sheet.max_row + 1
         
             value_error = "Seems like you did not fill all the data \nSorry you can not submit with blank field \nAnd also duration should be an integer value"
             if self.issue_option == "user-specific":
@@ -565,8 +555,8 @@ class ITReportForm(tk.Tk):
                      top=Side(style='thin'), 
                      bottom=Side(style='thin'))
                 for col, value in enumerate(data, start=2):
-                    sheet.cell(row=self.next_row, column=col, value=value)
-                    cell = sheet.cell(self.next_row, col)
+                    sheet.cell(row=next_row, column=col, value=value)
+                    cell = sheet.cell(next_row, col)
                     # cell.border = thin_border
                     if col in center_align_col:
                         cell.alignment = Alignment(horizontal="center", vertical="center")
@@ -577,11 +567,12 @@ class ITReportForm(tk.Tk):
                 start_col = 2
                 end_col =  9
                 data = general_issue
-                merge_range = f"{get_column_letter(start_col)}{self.next_row}:{get_column_letter(end_col)}{self.next_row}"
+                merge_range = f"{get_column_letter(start_col)}{next_row}:{get_column_letter(end_col)}{next_row}"
                 sheet.merge_cells(merge_range)
-                sheet.cell(row=self.next_row, column=start_col, value=data)
+                sheet.cell(row=next_row, column=start_col, value=data)
             workbook.save(writing_file_path)
-            self.next_row = sheet.max_row + 1
+            next_row = sheet.max_row + 1
+            self.next_row = next_row
             self.data_reset()
             self.specific_issue()
             self.data_ready.set()
@@ -633,13 +624,16 @@ class ITReportForm(tk.Tk):
         # self.after(50, lambda: self.username.event_generate('<Down>'))
 
     def user_options(self):
-        workbook = load_workbook(self.get_reading_file_path())
-        sheet = workbook["Sheet1"]
-        return {
-            "usernames": [cell.value for cell in sheet["B"] if cell.value is not None],
-            "names": [cell.value for cell in sheet["A"] if cell.value is not None] ,
-            "it": [cell.value for cell in sheet["C"] if cell.value is not None] 
-        }
+        # try:
+            workbook = load_workbook(self.get_reading_file_path())
+            sheet = workbook["Sheet1"]
+            return {
+                "usernames": [cell.value for cell in sheet["B"] if cell.value is not None],
+                "names": [cell.value for cell in sheet["A"] if cell.value is not None] ,
+                "it": [cell.value for cell in sheet["C"] if cell.value is not None] 
+            }
+        # except:
+        #     return {}
 
     def connect_server(self, client_socket):
       
@@ -704,7 +698,6 @@ class ITReportForm(tk.Tk):
                 self.ip_address_widget.delete(0, tk.END)
                 self.ip_address_widget.set(self.data.get("client_ip_addr"))
                 self.data_ready.clear()
-            print(self.tray_icon)
             self.show_window()
 
 
@@ -733,7 +726,6 @@ def handle_clients(client_socket, data_queue):
     try:
         data = client_socket.recv(1024).decode("utf-8")
         data = json.loads(data)
-        print(f"Received: {data}")
         data["client_ip_addr"] = client_socket.getpeername()[0]
         data_queue.put(data)
         
@@ -745,14 +737,14 @@ def handle_clients(client_socket, data_queue):
 
 
 def display_gui(queue):
-    mode = "server"
-    try:
+        mode = "server"
+    # try:
         app = ITReportForm(mode=mode)
         threading.Thread(target=process_gui_queue, args=(app, queue), daemon=True).start()
         app.protocol("WM_DELETE_WINDOW", app.minimize_to_tray)
         app.mainloop()
-    except Exception as e:
-        print(f"Error: {e}")
+    # except Exception as e:
+    #     print(f"Error: {e}")
 
 def process_gui_queue(app, queue):
     while True:
