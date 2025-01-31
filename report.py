@@ -70,34 +70,41 @@ class ITReportForm(tk.Tk):
             workbook = load_workbook(writing_file_path)
             self.remove_default_sheet(workbook)
             sheet = self.creat_new_worksheet(self.writing_file_path, workbook, current_date) or workbook.active
-            self.previous_date = self.date_updater(sheet)
-            self.next_row = self.next_row_checker(sheet, current_date)
+            self.previous_date = self.sheet_date_checker(sheet)
+            self.sheet_date_updater(sheet, current_date)
             workbook.save(writing_file_path)
 
         except Exception as e:
+            self.withdraw()
             mb.showerror("File Error", e)
+            self.deiconify()
     
-    def next_row_checker(self, sheet, current_date):
+    def sheet_date_updater(self, sheet, current_date):
         if self.previous_date:
-            if (current_date - self.previous_date.date()).days != 0:
-                next_row = sheet.max_row + 2
-                sheet[f"A{next_row}"] = current_date
-                sheet[f"A{next_row}"].number_format = "DD-MMM-YYYY"
-                self.previous_date = datetime.combine(current_date, datetime.min.time())
-                return next_row
-            else:
-                next_row = sheet.max_row
-                return next_row
+            try:
+                if (current_date - self.previous_date.date()).days != 0:
+                    if current_date < self.previous_date.date():
+                        raise ValueError("Sorry your current date configuration might be wrong \nPlease set the correct date before using the application")
+                    next_row = sheet.max_row + 2
+                    sheet[f"A{next_row}"] = current_date
+                    sheet[f"A{next_row}"].number_format = "DD-MMM-YYYY"
+                    self.previous_date = datetime.combine(current_date, datetime.min.time())
+            except Exception as e:
+                self.withdraw()
+                mb.showerror("Date Error", e)
+                self.destroy()
         else:
             next_row = sheet.max_row + 1
             sheet[f"A{next_row}"] = current_date
             sheet[f"A{next_row}"].number_format = "DD-MMM-YYYY"
             self.previous_date = datetime.combine(current_date, datetime.min.time())
-            return next_row
+            # return next_row
 
     def create_widget(self):
         self.font = ("helvetica", 10)
         btn_frm = self.widget(parent=self, name="frame", row=3, col=0, sticky="n")
+        btn_frm.grid_columnconfigure(2, weight=1)  # Adjust column width
+        btn_frm.grid_rowconfigure(1, weight=1) 
         self.configure_gui(btn_frm, 1, 3)
         
         if self.mode == "client":
@@ -117,7 +124,10 @@ class ITReportForm(tk.Tk):
             self.config(menu=self.create_menu())
             self.specific_issue()
         
-            submit_btn = self.widget(parent=btn_frm, name="button", text="Submit", row=0, col=1, command=self.on_data_submit)
+            submit_btn = ttk.Button(btn_frm, text="Submit", command=self.on_data_submit)
+            submit_btn.grid(row=0, column=0, padx=2.5, pady=2.5)
+            discard_btn = ttk.Button(btn_frm, text="Discard", command=self.data_discard)
+            discard_btn.grid(row=0, column=1, padx=2.5, pady=2.5)
         
 
     def widget(self, **kwargs):
@@ -387,11 +397,11 @@ class ITReportForm(tk.Tk):
         curr_date = datetime.now()
         # Get the current and next month
         current_month = curr_date.strftime("%B")  # e.g., "October"
-        next_month_date = curr_date + timedelta(days=31)  # Jump to the previous month
+        next_month_date = curr_date + timedelta(days=12)  # Jump to the next month from 21th by 21 + 12 = 33
         next_month = next_month_date.strftime("%B")  # e.g., "November"
         
         # Get the year
-        year = next_month_date.strftime("%Y")  # Year corresponds to the previous month
+        year = next_month_date.strftime("%Y")  # Year corresponds to the next month
         
         # Create the sheet name
         sheet_name = f"{current_month}-{next_month} {year}"
@@ -426,6 +436,7 @@ class ITReportForm(tk.Tk):
                 worksheet.merge_cells("A1:I2")  # Merge cells A1 to I1 for the title
                 title_cell = worksheet["A1"]
                 title_cell.value = main_title
+                title_cell.border = self.cell_border()
 
                 # Style the title
                 title_cell.font = Font(name="Calibri", size=16, bold=True)
@@ -459,6 +470,7 @@ class ITReportForm(tk.Tk):
                     cell = worksheet.cell(row=3, column=col)  # Header is on the second row
                     cell.fill = header_fill
                     cell.font = Font(name="Calibri", size=11, bold=True)  # Make header text bold
+                    cell.border = self.cell_border()
                     if col == 8:
                         cell.font = Font(name="calibri", size=9, bold=True)
                     cell.alignment = Alignment(horizontal="center", vertical="center")  # Center-align text
@@ -469,44 +481,20 @@ class ITReportForm(tk.Tk):
         return None
 
     
-    def date_updater(self, sheet):
-        raw_date_data = [cell.value for cell in sheet["A"] if cell.value is not None]
-        # print(f"this is the first dates: {dates}")
-        # Filter and process only valid dates
-        dates = []
-        for value in raw_date_data:
-            if isinstance(value, datetime):
-                # Already a datetime object
-                dates.append(value)
-            else:
+    def sheet_date_checker(self, sheet):
+        for row in range(sheet.max_row, 0, -1):
+            cell_value = sheet[f"A{row}"].value
+            if cell_value is not None:
+                if isinstance(cell_value, datetime):
+                    return cell_value
                 try:
                     # Attempt to parse string as date
-                    dates.append(datetime.strptime(value, "%d-%b-%Y").date())
+                    return datetime.strptime(cell_value, "%d-%b-%Y").date()
                 except (ValueError, TypeError):
                     # Skip invalid entries (like headers or titles)
                     continue
-        dates = [datetime.strptime(str(date), "%d-%b-%Y").date() if isinstance(date, str) else date for date in dates]
-        # date_style = NamedStyle(name="custom_date_style", number_format="DD-MMM-YYYY")
-
-        if dates:
-            return max(dates) # Assuming the dates are sorted or sparse
-        else:
-            return None
-        #     previous_date = None
-        # if previous_date:
-        #     if current_date > previous_date.date():
-        #         next_row = sheet.max_row + 2
-        #         sheet[f"A{next_row}"] = current_date
-        #         sheet[f"A{next_row}"].number_format = "DD-MMM-YYYY"
-        #         return next_row
-        #     else:
-        #         return sheet.max_row + 1
-        # else:
-        #     next_row = sheet.max_row + 1
-        #     sheet[f"A{next_row}"] = current_date
-        #     sheet[f"A{next_row}"].number_format = "DD-MMM-YYYY"
-        #     return next_row
-        
+        return None
+    
 
     def data_reset(self):
         if self.issue_option == "user-specific":
@@ -521,16 +509,28 @@ class ITReportForm(tk.Tk):
         else:
             self.general_issue_txt.delete("1.0", tk.END)
 
+    def cell_border(self):
+        thin_border = Side(style='thin', color="000000")
+        return Border(left=thin_border, 
+                right=thin_border, 
+                top=thin_border, 
+                bottom=thin_border)
 
+    def data_discard(self):
+        if mb.askyesno("Discard Data", "Do you want to proceed?"):
+            self.data_reset()
+            self.data_ready.set()
+    
     def on_data_submit(self):
-        writing_file_path = self.writing_file_path
         current_date = datetime.now()
+        workbook = load_workbook(self.writing_file_path)
+        sheet = workbook.active
         try:
-            workbook = load_workbook(writing_file_path)
-            sheet = workbook.active
-            if self.previous_date:
-                if (current_date - self.previous_date).days != 0:
-                    self.file_format_config(writing_file_path)
+            if (current_date - self.previous_date).days != 0:
+                self.file_format_config(self.writing_file_path)
+            else:
+                if sheet[f"B{sheet.max_row}"].value is None:
+                    next_row = sheet.max_row
                 else:
                     next_row = sheet.max_row + 1
         
@@ -550,14 +550,12 @@ class ITReportForm(tk.Tk):
                 data = [it_name, username, name, des, ip_address, time, duration, issue]
                 center_align_col = [5, 8]
                 
-                thin_border = Border(left=Side(style='thin'), 
-                     right=Side(style='thin'), 
-                     top=Side(style='thin'), 
-                     bottom=Side(style='thin'))
                 for col, value in enumerate(data, start=2):
+                    date_cell = sheet.cell(row=next_row, column=1)    #selecting date cells
+                    date_cell.border = self.cell_border()               #applying borders to date cells               
                     sheet.cell(row=next_row, column=col, value=value)
                     cell = sheet.cell(next_row, col)
-                    # cell.border = thin_border
+                    cell.border = self.cell_border()
                     if col in center_align_col:
                         cell.alignment = Alignment(horizontal="center", vertical="center")
             else:
@@ -570,9 +568,8 @@ class ITReportForm(tk.Tk):
                 merge_range = f"{get_column_letter(start_col)}{next_row}:{get_column_letter(end_col)}{next_row}"
                 sheet.merge_cells(merge_range)
                 sheet.cell(row=next_row, column=start_col, value=data)
-            workbook.save(writing_file_path)
+            workbook.save(self.writing_file_path)
             next_row = sheet.max_row + 1
-            self.next_row = next_row
             self.data_reset()
             self.specific_issue()
             self.data_ready.set()
@@ -737,14 +734,14 @@ def handle_clients(client_socket, data_queue):
 
 
 def display_gui(queue):
-        mode = "server"
-    # try:
+    mode = "server"
+    try:
         app = ITReportForm(mode=mode)
         threading.Thread(target=process_gui_queue, args=(app, queue), daemon=True).start()
         app.protocol("WM_DELETE_WINDOW", app.minimize_to_tray)
         app.mainloop()
-    # except Exception as e:
-    #     print(f"Error: {e}")
+    except Exception as e:
+        print(f"Error: {e}")
 
 def process_gui_queue(app, queue):
     while True:
@@ -763,6 +760,7 @@ def process_gui_queue(app, queue):
 if __name__ == "__main__":
     hosts = socket.gethostbyname_ex(socket.gethostname())[2]
     required_host = ""
+    print(hosts)
     try:
         for host in hosts:
             if "10.6" in host:
